@@ -858,6 +858,75 @@ function stockHistory(){
     officePanel("최종 재고 · 상품 (현재)",officeTable(["상품·SKU","!누적 입고 기준수량","!출고 반영","!현재 판매 가능"],finalProducts));
 }
 
+let scheduleMonth=day().slice(0,7);
+const scheduleKinds=["발주","입고","생산","발송","결제","기타"];
+const weekdayNames=["일","월","화","수","목","금","토"];
+const pad2=n=>String(n).padStart(2,"0");
+function scheduleDueRows(){
+  // 사입 목록의 결제 예정일 중 남은 잔액이 있는 건을 스케줄에 함께 보여줍니다.
+  return (store.purchases||[]).flatMap(row=>{
+    if(!row.paymentDueDate)return [];
+    const total=purchaseSupply(row)+(row.vat??0);
+    const paid=row.paidAmount??(row.paymentStatus==="paid"?total:0);
+    return total-paid>0?[{date:row.paymentDueDate,supplier:row.supplier,name:row.name,left:total-paid}]:[];
+  });
+}
+function schedule(){
+  const [year,month]=scheduleMonth.split("-").map(Number);
+  const days=new Date(Date.UTC(year,month,0)).getUTCDate();
+  const items=(store.schedules||[]).filter(row=>row.date.startsWith(scheduleMonth));
+  const due=scheduleDueRows().filter(row=>row.date.startsWith(scheduleMonth));
+  const today=day();
+  const byKind=scheduleKinds.map(kind=>[kind,items.filter(row=>row.kind===kind)]).filter(([,rows])=>rows.length);
+  const done=items.filter(row=>row.done).length;
+  const rows=Array.from({length:days},(_,index)=>{
+    const date=scheduleMonth+"-"+pad2(index+1);
+    const weekday=new Date(Date.UTC(year,month-1,index+1)).getUTCDay();
+    const entries=items.filter(row=>row.date===date).map(row=>
+      '<div class="schedule-item'+(row.done?' done':'')+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?' checked':'')+' aria-label="완료">'+
+      '<span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
+      '<button type="button" class="short" data-action="schedule-edit" data-id="'+esc(row.id)+'">수정</button>'+
+      '<button type="button" class="short danger" data-action="schedule-delete" data-id="'+esc(row.id)+'">삭제</button></div>').join("");
+    const dueEntries=due.filter(row=>row.date===date).map(row=>
+      '<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+' (사입 목록)</span></span></div>').join("");
+    return '<tr class="'+(weekday===0?"sun ":weekday===6?"sat ":"")+(date===today?"today":"")+'"><td class="schedule-date">'+(index+1)+'일</td><td>'+weekdayNames[weekday]+'</td><td class="schedule-cell">'+(entries+dueEntries||'<span class="muted">—</span>')+
+      '</td><td><button type="button" class="short" data-action="schedule-add" data-date="'+date+'">+ 추가</button></td></tr>';
+  }).join("");
+  return officeHeading("월별 스케줄",
+      '<button type="button" data-action="schedule-month" data-dir="-1">이전 달</button><button type="button" data-action="schedule-month" data-dir="0">이번 달</button><button type="button" data-action="schedule-month" data-dir="1">다음 달</button>'+
+      btn(bplus+" 스케줄 추가","schedule-add",true))+
+    '<section class="panel"><div class="filters"><label>조회 월 <input type="month" id="schedule-month" value="'+esc(scheduleMonth)+'" aria-label="조회 월"></label>'+
+      '<strong>'+year+'년 '+month+'월 · 총 '+items.length+'건 · 완료 '+done+'건'+(due.length?' · 결제 예정 '+due.length+'건':'')+'</strong>'+
+      '<span class="muted">'+(byKind.map(([kind,list])=>kind+" "+list.length).join(" · ")||"등록된 스케줄이 없습니다.")+'</span></div></section>'+
+    '<section class="panel"><div class="table-wrap"><table class="schedule-table"><thead><tr>'+th(["일","요일","스케줄","작업"])+'</tr></thead><tbody>'+rows+'</tbody></table></div></section>';
+}
+function openSchedule(id,date){
+  const row=(store.schedules||[]).find(item=>item.id===id)||{id:crypto.randomUUID(),date:date||(day().startsWith(scheduleMonth)?day():scheduleMonth+"-01"),kind:"기타",title:"",memo:""};
+  formDialog(id?"스케줄 수정":"스케줄 추가",
+    '<label>날짜<input type="date" name="date" value="'+esc(row.date)+'" required></label>'+
+    select("구분","kind",scheduleKinds,row.kind)+
+    '<label class="wide">제목<input name="title" maxlength="120" value="'+esc(row.title)+'" required></label>'+
+    '<label class="wide">메모<input name="memo" maxlength="500" value="'+esc(row.memo)+'"></label>',
+    async values=>{
+      const title=values.title.trim();
+      if(!title)throw Error("제목을 입력해 주세요.");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(values.date))throw Error("날짜를 입력해 주세요.");
+      const record={...row,date:values.date,kind:values.kind,title,memo:values.memo.trim()};
+      await commit({...store,schedules:[...(store.schedules||[]).filter(item=>item.id!==row.id),record].sort((a,b)=>a.date.localeCompare(b.date))});
+      scheduleMonth=values.date.slice(0,7);
+      render();
+    });
+}
+function deleteSchedule(id){
+  const row=(store.schedules||[]).find(item=>item.id===id);
+  if(!row)return;
+  formDialog("스케줄 삭제",'<p class="wide">'+esc(row.date)+' · '+esc(row.title)+' 스케줄을 삭제합니다.</p>',
+    async()=>{await commit({...store,schedules:(store.schedules||[]).filter(item=>item.id!==id)});},"삭제","삭제했습니다.");
+}
+async function toggleSchedule(id){
+  await commit({...store,schedules:(store.schedules||[]).map(item=>item.id===id?{...item,done:!item.done}:item)});
+}
+
 function openPurchase(id){
   const rows=store.purchases||[];
   const row=rows.find(record=>record.id===id)||{id:crypto.randomUUID(),date:day(),supplier:"",name:"",qty:"",price:"",unit:"kg",memo:""};
@@ -1785,7 +1854,8 @@ async function importOrders(file) {
 function demoData() {
   const products=[["AL500","구운 아몬드 500g",4400,120],["MX500","오리지날 믹스넛 500g",3800,3],["WN500","호두 500g",5200,60],["CN500","캐슈넛 500g",5200,40]].map(([sku,name,cost,units])=>({sku,name,cost,units,limit:5}));
   const samples=[[0,"쿠팡","신규",3,10400],[1,"네이버","포장중",2,9900],[2,"쿠팡","발송완료",4,11900],[3,"올레즈","신규",1,12900],[1,"쿠팡","발송완료",1,10800],[0,"네이버","취소",2,10400]];
-  return {products,orders:samples.map(([i,channel,status,qty,price],j)=>({id:"sample-"+j,number:"예시-"+(10001+j),line:"",date:day(),sku:products[i].sku,name:products[i].name,status,channel,qty,price,cost:products[i].cost,fee:Math.round(price*qty*.1),shipping:2900,pack:350,discount:500,carrier:status==="발송완료"?"CJ대한통운":"",tracking:status==="발송완료"?"0000000000":""}))};
+  return {products,orders:samples.map(([i,channel,status,qty,price],j)=>({id:"sample-"+j,number:"예시-"+(10001+j),line:"",date:day(),sku:products[i].sku,name:products[i].name,status,channel,qty,price,cost:products[i].cost,fee:Math.round(price*qty*.1),shipping:2900,pack:350,discount:500,carrier:status==="발송완료"?"CJ대한통운":"",tracking:status==="발송완료"?"0000000000":""})),
+    schedules:[["발주","견과류 발주","호두·아몬드 부족분",0],["입고","한국견과유통 입고 예정","거래명세서로 재고 반영",3],["생산","땅콩 소포장 생산","",5],["발송","정기 배송 마감","",8]].map(([kind,title,memo,offset],i)=>({id:"sch-"+i,date:shiftDate(day(),offset),kind,title,memo,done:false}))};
 }
 document.addEventListener("click",async event=>{
   const item=event.target.closest("[data-action]");
@@ -1819,6 +1889,15 @@ document.addEventListener("click",async event=>{
     }
     if(action==="purchase-entry")openPurchase(item.dataset.id);
     if(action==="statement-cancel"){statementOperation?.abort();$("statement-status").textContent="문서 읽기를 중지했습니다.";$("statement-cancel").hidden=true;}
+    if(action==="schedule-add")openSchedule(null,item.dataset.date);
+    if(action==="schedule-edit")openSchedule(item.dataset.id);
+    if(action==="schedule-delete")deleteSchedule(item.dataset.id);
+    if(action==="schedule-done")await toggleSchedule(item.dataset.id);
+    if(action==="schedule-month"){
+      const dir=Number(item.dataset.dir);
+      scheduleMonth=dir===0?day().slice(0,7):shiftDate(scheduleMonth+"-01",0,dir).slice(0,7);
+      render();
+    }
     if(action==="statement-reset"){statementDraft=statementEmpty();render();}
     if(action==="statement-parse"){
       const text=$("statement-text").value;
@@ -2013,6 +2092,7 @@ const officeGroups = [
   ["C/S업무", [["support","C/S목록"],["returned","반품관리"],["customers","고객관리"]]],
   ["사입업무", [["purchaseStatement","매입관리 (거래명세서 입고)"],["stockHistory","재고 내역"],["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
   ["통계", [["statistics","일자별 판매 현황"],["dailyFreight","일자별 배송비 현황"],["marketSales","판매처별 매출 현황"],["skuSales","상품별 매출 현황"],["marketSkuSales","판매처별 상품매출 현황"],["profit","판매 손익"]]],
+  ["스케줄", [["schedule","월별 스케줄"]]],
   ["도구", [["home","시작페이지"],["privacy","개인정보 폐기"],["?clear-export","엑셀 캐시 삭제"],["invoiceSearch","송장 검색"]]],
   ["마켓관리자", [["marketAdmin","판매자센터 바로가기"],["setup","판매처 연결 관리"]]],
   ["창", [["?sidebar","좌측메뉴 보이기"],["?workspace-layout-stacked","계단식배열"],["?workspace-layout-vertical","수직 배열"],["?workspace-layout-horizontal","수평 배열"],["?workspace-close","모든창 닫기"]]],
@@ -2414,6 +2494,7 @@ function editBulkMaterial(name,remove){
 const officeViews = {
   purchaseStatement,
   stockHistory,
+  schedule,
   bulkMaterials:bulkMaterialsView,
   costSheet:costSheetView,
   salesManagement:()=>officeHeading(tabs.salesManagement[0])+
@@ -2563,6 +2644,7 @@ $("content").addEventListener("input",event=>{
 });
 $("content").addEventListener("change",event=>{
   const target=event.target;
+  if(target.id==="schedule-month"&&/^\d{4}-\d{2}$/.test(target.value)){scheduleMonth=target.value;render();return;}
   if(target.id==="statement-file"){const file=target.files[0];target.value="";if(file)void readStatementFile(file);}
 });
 function updateStatementDraft(event){

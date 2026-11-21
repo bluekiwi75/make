@@ -101,3 +101,13 @@
 .settings label{min-width:0}
 #statement-form{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
 #statement-form input{width:100%;min-width:0}
+.schedule-table td{vertical-align:top;white-space:normal}
+.schedule-table td.schedule-date{font-weight:750;white-space:nowrap}
+.schedule-table tr.sat td:nth-child(1),.schedule-table tr.sat td:nth-child(2){color:#2f6fa8}
+.schedule-table tr.sun td:nth-child(1),.schedule-table tr.sun td:nth-child(2){color:#a33d2f}
+.schedule-table tr.today{background:#f1f7e8}
+.schedule-cell{min-width:240px;width:100%}
+.schedule-item{display:flex;align-items:center;gap:8px;padding:3px 0;flex-wrap:wrap}
+.schedule-item.done .schedule-title{text-decoration:line-through;color:var(--muted)}
+.schedule-title{min-width:0;overflow-wrap:anywhere;flex:1 1 140px}
+.schedule-item input[type=checkbox]{width:auto;min-height:0}
