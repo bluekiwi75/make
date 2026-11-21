@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1794990000000,
+      "tag": "0000_market_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794990700000,
+      "tag": "0001_market_connection",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794990900000,
+      "tag": "0002_market_connection_extra",
+      "breakpoints": true
+    }
+  ]
+}
