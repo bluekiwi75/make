@@ -726,7 +726,7 @@ function purchaseStatement(){
     '<label>PDF·JPG 거래명세서<input type="file" id="statement-file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"></label>'+
     '<div class="buttons"><button type="button" class="short" id="statement-cancel" data-action="statement-cancel" hidden>읽기 중지</button></div>'+
     '<p class="muted" id="statement-status" role="status">'+esc(draft.status||"앞 5쪽까지 읽어 품목, 수량, 단가를 표로 만듭니다. 스캔 이미지는 글자 인식으로 읽어 시간이 걸릴 수 있습니다.")+'</p>'+
-    '<details><summary>문서가 읽히지 않으면 내용을 붙여넣어 분석</summary>'+
+    '<details'+(draft.text&&!rows.length?' open':'')+'><summary>'+(draft.text?'문서에서 읽은 내용 (품목이 잘못 잡히면 여기서 고쳐 다시 분석)':'문서가 읽히지 않으면 내용을 붙여넣어 분석')+'</summary>'+
     '<textarea id="statement-text" rows="6" style="width:100%;margin:8px 0" placeholder="품목 수량 단가 공급가액 순서의 줄을 붙여넣어 주세요.">'+esc(draft.text)+'</textarea>'+
     btn("붙여넣은 내용 분석","statement-parse")+'</details></div></section>'+
     '<section class="panel">'+panelHead("2. 읽은 내용 확인 · "+rows.length+"개 품목",
@@ -782,7 +782,7 @@ function fillStatement(text,statusText){
     sku:matchStatementProduct(item.name,store.products||[]),use:true}));
   draft.rows.forEach(row=>{if(!row.sku)row.use=false;});
   const unmatched=draft.rows.filter(r=>!r.sku).length;
-  draft.status=statusText+" · "+(parsed.items.length?parsed.items.length+"개 품목을 찾았습니다."+(unmatched?" 상품을 연결하지 못한 "+unmatched+"개는 직접 선택해 주세요.":" 값이 맞는지 확인해 주세요."):"품목 줄을 찾지 못했습니다. 아래 붙여넣기로 내용을 확인할 수 있습니다.");
+  draft.status=statusText+" · "+(parsed.items.length?parsed.items.length+"개 품목을 찾았습니다."+(unmatched?" 상품을 연결하지 못한 "+unmatched+"개는 직접 선택해 주세요.":" 값이 맞는지 확인해 주세요."):"품목 줄을 찾지 못했습니다. 아래에 문서에서 읽은 내용을 표시했습니다. 이 내용을 알려주시면 양식에 맞게 인식 규칙을 추가할 수 있습니다.");
   render();
 }
 async function readStatementFile(file){
