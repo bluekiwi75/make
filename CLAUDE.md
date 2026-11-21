@@ -31,3 +31,9 @@
 ## 확인 방법
 - `node run-local.mjs` 후 `http://127.0.0.1:8787/#화면이름`. Playwright가 설치되어 있어 `require('playwright')`로 캡처할 수 있습니다.
 - 테스트용 거래명세서 PDF는 저장소에 없습니다. 필요하면 사용자에게 다시 받으세요.
+
+## 점검 스크립트 (tools/qa)
+- `node build.mjs` → `node tools/qa/fake-server.mjs &` (가짜 DB, `http://127.0.0.2:8790`) 후 실행합니다. `/__reset`으로 초기화, `/__db`로 저장된 내용을 확인합니다.
+- `node tools/qa/crawl-menus.js <출력폴더> [화면id]`: 모든 메뉴의 버튼을 눌러 저장까지 실행하고 오류를 모읍니다(약 20분).
+- `node tools/qa/check-links.js`: 주문, 상품, 사입, 생산, 거래명세서, 재고 내역 등 메뉴 간 연결을 확인합니다.
+- 판매처 로그인 등록(암호화 키)과 삭제(비밀번호 0000)는 테스트 환경에서 서버가 거부하는 것이 정상입니다.
