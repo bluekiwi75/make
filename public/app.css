@@ -95,5 +95,7 @@
 .statement-table td input,.statement-table td select{width:100%;min-width:0}
 .statement-table td input[type=number]{width:96px}
 .statement-table td input[data-statement-field=name]{min-width:150px}
-.statement-table td select[data-statement-field=sku]{min-width:190px}
+.statement-table td select[data-statement-field=target]{min-width:190px}
 .statement-table td input[type=checkbox]{width:auto}
+.settings input[type=file],.settings textarea{width:100%;max-width:100%}
+.settings label{min-width:0}
