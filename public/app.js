@@ -928,32 +928,64 @@ async function toggleSchedule(id){
   await commit({...store,schedules:(store.schedules||[]).map(item=>item.id===id?{...item,done:!item.done}:item)});
 }
 
-// 대시보드: 지연된 스케줄과 오늘부터 7일 안의 스케줄, 결제 예정을 보여줍니다.
+// 대시보드: 월 달력. 날짜마다 일정과 "스케줄 1~5" 체크 칸을 보여줍니다.
+let dashDay=null;
+const defaultCheckNames=["스케줄 1","스케줄 2","스케줄 3","스케줄 4","스케줄 5"];
+const checkNames=()=>store.scheduleChecks?.names||defaultCheckNames;
+const checksFor=date=>{const row=store.scheduleChecks?.days?.[date];return Array.from({length:5},(_,i)=>Boolean(row?.[i]));};
+async function toggleCheck(date,index){
+  const names=checkNames(), days={...(store.scheduleChecks?.days||{})};
+  const row=checksFor(date);
+  row[index]=!row[index];
+  if(row.some(Boolean))days[date]=row;else delete days[date];
+  await commit({...store,scheduleChecks:{names,days}});
+}
+function openCheckNames(){
+  const names=checkNames();
+  formDialog("스케줄 체크 이름",names.map((name,i)=>'<label class="wide">체크 '+(i+1)+'<input name="n'+i+'" maxlength="30" value="'+esc(name)+'" required></label>').join(""),
+    async values=>{
+      const next=names.map((_,i)=>values["n"+i].trim());
+      if(next.some(name=>!name))throw Error("이름을 모두 입력해 주세요.");
+      await commit({...store,scheduleChecks:{names:next,days:{...(store.scheduleChecks?.days||{})}}});
+    });
+}
 function dashboardSchedule(){
-  const today=day(), until=shiftDate(today,7);
-  const label=date=>{
-    if(date===today)return "오늘";
-    if(date===shiftDate(today,1))return "내일";
-    const weekday=weekdayNames[new Date(date+"T00:00:00Z").getUTCDay()];
-    return date.slice(5).replace("-","/")+" ("+weekday+")";
-  };
-  const open=(store.schedules||[]).filter(row=>!row.done&&row.date<=until);
-  const due=scheduleDueRows().filter(row=>row.date<=until);
-  const rows=[
-    ...open.map(row=>({date:row.date,late:row.date<today,html:
-      '<div class="schedule-item"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'" aria-label="완료">'+
-      '<span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span></div>'})),
-    ...due.map(row=>({date:row.date,late:row.date<today,html:
-      '<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+'</span></span></div>'}))
-  ].sort((a,b)=>a.date.localeCompare(b.date));
-  const shown=rows.slice(0,8);
-  const late=rows.filter(row=>row.late).length;
-  const body=shown.length?'<div class="table-wrap"><table class="schedule-table"><tbody>'+shown.map(row=>
-    '<tr class="'+(row.date===today?"today":"")+'"><td class="schedule-date'+(row.late?' danger':'')+'">'+esc(label(row.date))+(row.late?'<span class="sub danger">지연</span>':'')+'</td><td class="schedule-cell">'+row.html+'</td></tr>').join("")+'</tbody></table></div>'+
-    (rows.length>shown.length?'<p class="totals">외 '+(rows.length-shown.length)+'건은 월별 스케줄에서 확인하세요.</p>':'')
-    :'<p class="empty">오늘부터 7일 안에 예정된 스케줄이 없습니다.</p>';
-  return '<section class="panel" id="dashboard-schedule">'+panelHead("다가오는 스케줄 · 7일"+(late?" · 지연 "+late+"건":""),
-    '<button type="button" data-action="schedule-add" data-date="'+today+'">'+bplus+' 추가</button><a class="button short" href="#schedule">월별 스케줄</a>')+body+'</section>';
+  const today=day();
+  const [year,month]=scheduleMonth.split("-").map(Number);
+  const days=new Date(Date.UTC(year,month,0)).getUTCDate();
+  const lead=new Date(Date.UTC(year,month-1,1)).getUTCDay();
+  const selected=dashDay&&dashDay.startsWith(scheduleMonth)?dashDay:(today.startsWith(scheduleMonth)?today:scheduleMonth+"-01");
+  const items=(store.schedules||[]).filter(row=>row.date.startsWith(scheduleMonth));
+  const due=scheduleDueRows().filter(row=>row.date.startsWith(scheduleMonth));
+  const late=(store.schedules||[]).filter(row=>!row.done&&row.date<today).length;
+  const cells=[];
+  for(let i=0;i<lead;i++)cells.push('<div class="cal-cell blank"></div>');
+  for(let d=1;d<=days;d++){
+    const date=scheduleMonth+"-"+pad2(d), weekday=(lead+d-1)%7;
+    const list=items.filter(row=>row.date===date), dueList=due.filter(row=>row.date===date);
+    const marks=checksFor(date), count=marks.filter(Boolean).length;
+    const shown=list.slice(0,2);
+    cells.push('<button type="button" class="cal-cell'+(date===today?" today":"")+(date===selected?" selected":"")+(weekday===0?" sun":weekday===6?" sat":"")+'" data-action="calendar-day" data-date="'+date+'" aria-label="'+month+'월 '+d+'일'+(list.length?", 일정 "+list.length+"건":"")+(count?", 체크 "+count+"/5":"")+'">'+
+      '<b>'+d+'</b>'+shown.map(row=>'<span class="cal-item'+(row.done?" done":"")+'">'+esc(row.title)+'</span>').join("")+
+      (list.length>shown.length?'<span class="cal-more">+'+(list.length-shown.length)+'건</span>':"")+(dueList.length?'<span class="cal-item pay">결제 예정 '+dueList.length+'</span>':"")+
+      '<span class="cal-dots" aria-hidden="true">'+marks.map(on=>'<i'+(on?' class="on"':'')+'></i>').join("")+'</span></button>');
+  }
+  const dayItems=(store.schedules||[]).filter(row=>row.date===selected);
+  const dayDue=scheduleDueRows().filter(row=>row.date===selected);
+  const marks=checksFor(selected), names=checkNames();
+  const selectedDate=new Date(selected+"T00:00:00Z");
+  const detail='<div class="cal-detail"><div><h3>'+(selectedDate.getUTCMonth()+1)+'월 '+selectedDate.getUTCDate()+'일 ('+weekdayNames[selectedDate.getUTCDay()]+')'+(selected===today?' · 오늘':'')+'</h3>'+
+    '<div class="check-grid" role="group" aria-label="스케줄 체크">'+names.map((name,i)=>
+      '<label class="check-item'+(marks[i]?" on":"")+'"><input type="checkbox" data-action="check-toggle" data-date="'+selected+'" data-index="'+i+'"'+(marks[i]?" checked":"")+'><span>'+esc(name)+'</span></label>').join("")+'</div>'+
+    '<p class="totals">체크 '+marks.filter(Boolean).length+'/5 <button type="button" class="short" data-action="check-names">이름 바꾸기</button></p></div>'+
+    '<div><h3>일정</h3>'+(dayItems.length||dayDue.length?dayItems.map(row=>
+      '<div class="schedule-item'+(row.done?" done":"")+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?" checked":"")+' aria-label="완료"><span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
+      '<button type="button" class="short" data-action="schedule-edit" data-id="'+esc(row.id)+'">수정</button></div>').join("")+
+      dayDue.map(row=>'<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+'</span></span></div>').join(""):'<p class="empty">이 날짜에 등록된 일정이 없습니다.</p>')+
+    '<p class="totals">'+btn(bplus+" 일정 추가","schedule-add").replace('<button','<button data-date="'+selected+'"')+'</p></div></div>';
+  return '<section class="panel" id="dashboard-schedule">'+panelHead(year+"년 "+month+"월 스케줄"+(late?" · 지연 "+late+"건":""),
+    '<button type="button" class="short" data-action="schedule-month" data-dir="-1">이전 달</button><button type="button" class="short" data-action="schedule-month" data-dir="0">이번 달</button><button type="button" class="short" data-action="schedule-month" data-dir="1">다음 달</button><a class="button short" href="#schedule">월별 스케줄</a>')+
+    '<div class="cal"><div class="cal-head">'+weekdayNames.map((name,i)=>'<span class="'+(i===0?"sun":i===6?"sat":"")+'">'+name+'</span>').join("")+'</div><div class="cal-grid">'+cells.join("")+'</div></div>'+detail+'</section>';
 }
 
 function openPurchase(id){
@@ -1918,6 +1950,9 @@ document.addEventListener("click",async event=>{
     }
     if(action==="purchase-entry")openPurchase(item.dataset.id);
     if(action==="statement-cancel"){statementOperation?.abort();$("statement-status").textContent="문서 읽기를 중지했습니다.";$("statement-cancel").hidden=true;}
+    if(action==="calendar-day"){dashDay=item.dataset.date;render();}
+    if(action==="check-toggle")await toggleCheck(item.dataset.date,Number(item.dataset.index));
+    if(action==="check-names")openCheckNames();
     if(action==="schedule-add")openSchedule(null,item.dataset.date);
     if(action==="schedule-edit")openSchedule(item.dataset.id);
     if(action==="schedule-delete")deleteSchedule(item.dataset.id);

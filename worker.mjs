@@ -166,6 +166,12 @@ async function state(request, env, url) {
     row&&string(row.id,true)&&validDay(row.date)&&string(row.title,true)&&["발주","입고","생산","발송","결제","기타"].includes(row.kind)&&
     typeof row.memo==="string"&&row.memo.length<=1000&&(row.done===undefined||typeof row.done==="boolean")
   )||!unique(schedules,row=>row.id))return json({error:"스케줄의 날짜, 구분, 제목을 확인해 주세요."},400);
+  if(input.data.scheduleChecks===undefined)input.data.scheduleChecks=previous.scheduleChecks;
+  const checks=input.data.scheduleChecks;
+  if(checks!==undefined&&!(checks&&Array.isArray(checks.names)&&checks.names.length===5&&checks.names.every(name=>string(name,true))&&
+    checks.days&&typeof checks.days==="object"&&!Array.isArray(checks.days)&&Object.keys(checks.days).length<=1500&&
+    Object.entries(checks.days).every(([date,row])=>validDay(date)&&Array.isArray(row)&&row.length===5&&row.every(value=>typeof value==="boolean"))))
+    return json({error:"스케줄 체크 항목을 확인해 주세요."},400);
   if(input.data.customChannels===undefined)input.data.customChannels=previous.customChannels;
   if(input.data.deletedChannels===undefined)input.data.deletedChannels=previous.deletedChannels;
   const custom=input.data.customChannels??[];
@@ -212,7 +218,7 @@ async function state(request, env, url) {
     const sealed=await sealMarket(env,aad,{username:username.trim(),password});
     sellerLogins=sellerLogins.filter(entry=>entry.channel!==channel).concat({channel,sealed});
   }
-  const output = JSON.stringify({costSheet:input.data.costSheet,officeRecords:input.data.officeRecords,collectionColumns:input.data.collectionColumns,purchases:input.data.purchases,production:input.data.production,schedules:input.data.schedules,sellerLogins:sellerLogins.length?sellerLogins:undefined,orders: input.data.orders, products: input.data.products, customChannels:input.data.customChannels, deletedChannels:input.data.deletedChannels, printRules:input.data.printRules, businessName: businessName?.trim()});
+  const output = JSON.stringify({costSheet:input.data.costSheet,officeRecords:input.data.officeRecords,collectionColumns:input.data.collectionColumns,purchases:input.data.purchases,production:input.data.production,schedules:input.data.schedules,scheduleChecks:input.data.scheduleChecks,sellerLogins:sellerLogins.length?sellerLogins:undefined,orders: input.data.orders, products: input.data.products, customChannels:input.data.customChannels, deletedChannels:input.data.deletedChannels, printRules:input.data.printRules, businessName: businessName?.trim()});
   const write = input.rev === 0
     ? env.DB.prepare("INSERT INTO market_state (owner_id, revision, payload) VALUES (?, 1, ?) ON CONFLICT(owner_id) DO NOTHING").bind(currentKey, output)
     : env.DB.prepare("UPDATE market_state SET revision = revision + 1, payload = ? WHERE owner_id = ? AND revision = ?").bind(output, currentKey, input.rev);
