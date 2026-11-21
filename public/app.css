@@ -99,3 +99,5 @@
 .statement-table td input[type=checkbox]{width:auto}
 .settings input[type=file],.settings textarea{width:100%;max-width:100%}
 .settings label{min-width:0}
+#statement-form{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+#statement-form input{width:100%;min-width:0}
