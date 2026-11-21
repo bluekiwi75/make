@@ -860,7 +860,12 @@ function stockHistory(){
 }
 
 let scheduleMonth=day().slice(0,7);
-const scheduleKinds=["발주","입고","생산","발송","결제","기타"];
+const scheduleColors=[["#c0392b","빨강"],["#e67e22","주황"],["#d4a017","노랑"],["#27ae60","초록"],["#16a085","청록"],["#2980b9","파랑"],["#6c5ce7","보라"],["#d63384","분홍"],["#8d6e63","갈색"],["#546e7a","회색"]];
+const scheduleShapes=["●","■","▲","◆","★","▼","✚","♥"];
+const defaultScheduleTypes=[{id:"t-order",name:"발주",color:"#2980b9",shape:"■"},{id:"t-in",name:"입고",color:"#27ae60",shape:"▲"},{id:"t-prod",name:"생산",color:"#e67e22",shape:"◆"},{id:"t-ship",name:"발송",color:"#6c5ce7",shape:"●"},{id:"t-pay",name:"결제",color:"#c0392b",shape:"★"},{id:"t-etc",name:"기타",color:"#546e7a",shape:"▼"}];
+const scheduleTypes=()=>store.scheduleTypes||defaultScheduleTypes;
+const scheduleType=kind=>scheduleTypes().find(type=>type.name===kind)||{name:kind,color:"#546e7a",shape:"▼"};
+const typeChip=kind=>{const type=scheduleType(kind);return '<span class="type-chip" style="--c:'+type.color+'"><i>'+type.shape+'</i>'+esc(kind)+'</span>';};
 const weekdayNames=["일","월","화","수","목","금","토"];
 const pad2=n=>String(n).padStart(2,"0");
 function scheduleDueRows(){
@@ -878,14 +883,14 @@ function schedule(){
   const items=(store.schedules||[]).filter(row=>row.date.startsWith(scheduleMonth));
   const due=scheduleDueRows().filter(row=>row.date.startsWith(scheduleMonth));
   const today=day();
-  const byKind=scheduleKinds.map(kind=>[kind,items.filter(row=>row.kind===kind)]).filter(([,rows])=>rows.length);
+  const byKind=scheduleTypes().map(type=>[type.name,items.filter(row=>row.kind===type.name)]).filter(([,rows])=>rows.length);
   const done=items.filter(row=>row.done).length;
   const rows=Array.from({length:days},(_,index)=>{
     const date=scheduleMonth+"-"+pad2(index+1);
     const weekday=new Date(Date.UTC(year,month-1,index+1)).getUTCDay();
     const entries=items.filter(row=>row.date===date).map(row=>
       '<div class="schedule-item'+(row.done?' done':'')+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?' checked':'')+' aria-label="완료">'+
-      '<span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
+      ''+typeChip(row.kind)+'<span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
       '<button type="button" class="short" data-action="schedule-edit" data-id="'+esc(row.id)+'">수정</button>'+
       '<button type="button" class="short danger" data-action="schedule-delete" data-id="'+esc(row.id)+'">삭제</button></div>').join("");
     const dueEntries=due.filter(row=>row.date===date).map(row=>
@@ -896,16 +901,61 @@ function schedule(){
   return officeHeading("월별 스케줄",
       '<button type="button" data-action="schedule-month" data-dir="-1">이전 달</button><button type="button" data-action="schedule-month" data-dir="0">이번 달</button><button type="button" data-action="schedule-month" data-dir="1">다음 달</button>'+
       btn(bplus+" 스케줄 추가","schedule-add",true))+
+    scheduleTypePanel()+
     '<section class="panel"><div class="filters"><label>조회 월 <input type="month" id="schedule-month" value="'+esc(scheduleMonth)+'" aria-label="조회 월"></label>'+
       '<strong>'+year+'년 '+month+'월 · 총 '+items.length+'건 · 완료 '+done+'건'+(due.length?' · 결제 예정 '+due.length+'건':'')+'</strong>'+
-      '<span class="muted">'+(byKind.map(([kind,list])=>kind+" "+list.length).join(" · ")||"등록된 스케줄이 없습니다.")+'</span></div></section>'+
+      '<span class="muted">'+(byKind.map(([kind,list])=>typeChip(kind)+" "+list.length).join(" ")||"등록된 스케줄이 없습니다.")+'</span></div></section>'+
     '<section class="panel"><div class="table-wrap"><table class="schedule-table"><thead><tr>'+th(["일","요일","스케줄","작업"])+'</tr></thead><tbody>'+rows+'</tbody></table></div></section>';
 }
+function scheduleTypePanel(){
+  const types=scheduleTypes();
+  const used=name=>(store.schedules||[]).filter(row=>row.kind===name).length;
+  return officePanel("스케줄 타입 · "+types.length+"개",officeTable(["표시","색","모양","!사용 중인 일정","작업"],types.map(type=>[
+    typeChip(type.name),
+    '<span class="swatch-dot" style="--c:'+type.color+'"></span> '+esc((scheduleColors.find(([hex])=>hex===type.color)||[type.color,type.color])[1]),
+    '<span class="shape-dot" style="--c:'+type.color+'">'+type.shape+'</span>',
+    used(type.name)+"건",
+    '<button type="button" class="short" data-action="schedule-type-edit" data-id="'+esc(type.id)+'">수정</button> <button type="button" class="short danger" data-action="schedule-type-delete" data-id="'+esc(type.id)+'">삭제</button>'])),
+    btn(bplus+" 타입 등록","schedule-type-add"));
+}
+function openScheduleType(id){
+  const types=scheduleTypes();
+  const row=types.find(type=>type.id===id)||{id:"t-"+crypto.randomUUID().slice(0,8),name:"",color:"",shape:""};
+  if(!id&&types.length>=scheduleShapes.length){notify("타입은 최대 "+scheduleShapes.length+"개까지 등록할 수 있습니다.");return;}
+  const usedColors=new Set(types.filter(type=>type.id!==row.id).map(type=>type.color));
+  const usedShapes=new Set(types.filter(type=>type.id!==row.id).map(type=>type.shape));
+  formDialog(id?"스케줄 타입 수정":"스케줄 타입 등록",
+    '<label class="wide">타입 이름<input name="name" maxlength="20" value="'+esc(row.name)+'" required></label>'+
+    '<fieldset class="wide swatches"><legend>색 (다른 타입과 겹치지 않게 선택)</legend>'+scheduleColors.map(([hex,label])=>
+      '<label class="swatch'+(usedColors.has(hex)?" used":"")+'" style="--c:'+hex+'" title="'+label+(usedColors.has(hex)?" · 사용 중":"")+'"><input type="radio" name="color" value="'+hex+'"'+(row.color===hex?" checked":"")+(usedColors.has(hex)?" disabled":"")+' required><span></span><small>'+label+'</small></label>').join("")+'</fieldset>'+
+    '<fieldset class="wide swatches"><legend>모양</legend>'+scheduleShapes.map(shape=>
+      '<label class="shape-pick'+(usedShapes.has(shape)?" used":"")+'" title="'+(usedShapes.has(shape)?"사용 중":"")+'"><input type="radio" name="shape" value="'+shape+'"'+(row.shape===shape?" checked":"")+(usedShapes.has(shape)?" disabled":"")+' required><span>'+shape+'</span></label>').join("")+'</fieldset>',
+    async values=>{
+      const name=values.name.trim();
+      if(!name)throw Error("타입 이름을 입력해 주세요.");
+      if(types.some(type=>type.id!==row.id&&type.name===name))throw Error("같은 이름의 타입이 이미 있습니다.");
+      if(!values.color||!values.shape)throw Error("색과 모양을 선택해 주세요.");
+      const record={id:row.id,name,color:values.color,shape:values.shape};
+      const next=id?types.map(type=>type.id===row.id?record:type):[...types,record];
+      const renamed=id&&row.name!==name?(store.schedules||[]).map(item=>item.kind===row.name?{...item,kind:name}:item):store.schedules;
+      await commit({...store,scheduleTypes:next,...(renamed?{schedules:renamed}:{})});
+    });
+}
+function deleteScheduleType(id){
+  const types=scheduleTypes(), row=types.find(type=>type.id===id);
+  if(!row)return;
+  const count=(store.schedules||[]).filter(item=>item.kind===row.name).length;
+  if(types.length<=1){notify("타입은 최소 1개가 필요합니다.");return;}
+  if(count){notify("‘"+row.name+"’ 타입을 쓰는 일정이 "+count+"건 있습니다. 일정의 타입을 먼저 바꿔 주세요.");return;}
+  formDialog("스케줄 타입 삭제",'<p class="wide">‘'+esc(row.name)+'’ 타입을 삭제합니다.</p>',
+    async()=>{await commit({...store,scheduleTypes:types.filter(type=>type.id!==id)});},"삭제","삭제했습니다.");
+}
+
 function openSchedule(id,date){
   const row=(store.schedules||[]).find(item=>item.id===id)||{id:crypto.randomUUID(),date:date||(day().startsWith(scheduleMonth)?day():scheduleMonth+"-01"),kind:"기타",title:"",memo:""};
   formDialog(id?"스케줄 수정":"스케줄 추가",
     '<label>날짜<input type="date" name="date" value="'+esc(row.date)+'" required></label>'+
-    select("구분","kind",scheduleKinds,row.kind)+
+    select("구분","kind",[...new Set([...scheduleTypes().map(type=>type.name),row.kind])],row.kind)+
     '<label class="wide">제목<input name="title" maxlength="120" value="'+esc(row.title)+'" required></label>'+
     '<label class="wide">메모<input name="memo" maxlength="500" value="'+esc(row.memo)+'"></label>',
     async values=>{
@@ -946,7 +996,7 @@ function dashboardSchedule(){
     const list=items.filter(row=>row.date===date), dueList=due.filter(row=>row.date===date);
     const shown=list.slice(0,2);
     cells.push('<button type="button" class="cal-cell'+(date===today?" today":"")+(date===selected?" selected":"")+(weekday===0?" sun":weekday===6?" sat":"")+'" data-action="calendar-day" data-date="'+date+'" aria-label="'+month+'월 '+d+'일'+(list.length?", 일정 "+list.length+"건":"")+'">'+
-      '<b>'+d+'</b>'+shown.map(row=>'<span class="cal-item'+(row.done?" done":"")+'">'+esc(row.title)+'</span>').join("")+
+      '<b>'+d+'</b>'+shown.map(row=>{const type=scheduleType(row.kind);return '<span class="cal-item typed'+(row.done?" done":"")+'" style="--c:'+type.color+'"><i>'+type.shape+'</i>'+esc(row.title)+'</span>';}).join("")+
       (list.length>shown.length?'<span class="cal-more">+'+(list.length-shown.length)+'건</span>':"")+(dueList.length?'<span class="cal-item pay">결제 예정 '+dueList.length+'</span>':"")+
       '</button>');
   }
@@ -955,12 +1005,13 @@ function dashboardSchedule(){
   const selectedDate=new Date(selected+"T00:00:00Z");
   const detail='<div class="cal-detail"><div><h3>'+(selectedDate.getUTCMonth()+1)+'월 '+selectedDate.getUTCDate()+'일 ('+weekdayNames[selectedDate.getUTCDay()]+')'+(selected===today?' · 오늘':'')+' 일정</h3>'+
     (dayItems.length||dayDue.length?dayItems.map(row=>
-      '<div class="schedule-item'+(row.done?" done":"")+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?" checked":"")+' aria-label="완료"><span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
+      '<div class="schedule-item'+(row.done?" done":"")+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?" checked":"")+' aria-label="완료">'+typeChip(row.kind)+'<span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
       '<button type="button" class="short" data-action="schedule-edit" data-id="'+esc(row.id)+'">수정</button></div>').join("")+
       dayDue.map(row=>'<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+'</span></span></div>').join(""):'<p class="empty">이 날짜에 등록된 일정이 없습니다.</p>')+
     '<p class="totals">'+btn(bplus+" 일정 추가","schedule-add").replace('<button','<button data-date="'+selected+'"')+'</p></div></div>';
   return '<section class="panel" id="dashboard-schedule">'+panelHead(year+"년 "+month+"월 스케줄"+(late?" · 지연 "+late+"건":""),
-    '<button type="button" class="short" data-action="schedule-month" data-dir="-1">이전 달</button><button type="button" class="short" data-action="schedule-month" data-dir="0">이번 달</button><button type="button" class="short" data-action="schedule-month" data-dir="1">다음 달</button><a class="button short" href="#schedule">월별 스케줄</a>')+
+    '<button type="button" class="short" data-action="schedule-month" data-dir="-1">이전 달</button><button type="button" class="short" data-action="schedule-month" data-dir="0">이번 달</button><button type="button" class="short" data-action="schedule-month" data-dir="1">다음 달</button><button type="button" class="short" data-action="schedule-type-add">타입 등록</button><a class="button short" href="#schedule">월별 스케줄</a>')+
+    '<div class="legend" aria-label="스케줄 타입">'+scheduleTypes().map(type=>typeChip(type.name)).join("")+'</div>'+
     '<div class="cal"><div class="cal-head">'+weekdayNames.map((name,i)=>'<span class="'+(i===0?"sun":i===6?"sat":"")+'">'+name+'</span>').join("")+'</div><div class="cal-grid">'+cells.join("")+'</div></div>'+detail+'</section>';
 }
 
@@ -1926,6 +1977,9 @@ document.addEventListener("click",async event=>{
     }
     if(action==="purchase-entry")openPurchase(item.dataset.id);
     if(action==="statement-cancel"){statementOperation?.abort();$("statement-status").textContent="문서 읽기를 중지했습니다.";$("statement-cancel").hidden=true;}
+    if(action==="schedule-type-add")openScheduleType();
+    if(action==="schedule-type-edit")openScheduleType(item.dataset.id);
+    if(action==="schedule-type-delete")deleteScheduleType(item.dataset.id);
     if(action==="calendar-day"){dashDay=item.dataset.date;render();}
     if(action==="schedule-add")openSchedule(null,item.dataset.date);
     if(action==="schedule-edit")openSchedule(item.dataset.id);
