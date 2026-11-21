@@ -36,11 +36,7 @@ const rangeByPage = {};
 function dateRange(view) {
   if (!rangeByPage[view]) {
     const today = day();
-    const monthly = view === "home" || view === "profit";
-    rangeByPage[view] = {
-      start: monthly ? today.slice(0, 7) + "-01" : "",
-      end: monthly ? today : ""
-    };
+    rangeByPage[view] = {start: today.slice(0, 7) + "-01", end: today};
   }
   return rangeByPage[view];
 }
@@ -54,7 +50,7 @@ function rangeControl(view) {
   return '<form class="range-filter" id="period-form"><strong>조회 기간 · '+(view==="purchases"?"매입일":view==="production"?"생산일":"주문일")+'</strong>' +
     '<label><input type="date" name="start" aria-label="시작일" value="' + esc(start) + '"></label><span>~</span>' +
     '<label><input type="date" name="end" aria-label="종료일" value="' + esc(end) + '"></label>' +
-    '<button type="submit" class="primary">조회</button>' + btn("전체 기간","all-dates") + '</form>';
+    '<button type="submit" class="primary">조회</button>' + btn("1주일","range-preset").replace('<button','<button data-preset="1주"') + btn("1개월","range-preset").replace('<button','<button data-preset="1개월"') + btn("3개월","range-preset").replace('<button','<button data-preset="3개월"') + btn("6개월","range-preset").replace('<button','<button data-preset="6개월"') + btn("전체 기간","all-dates") + '</form>';
 }
 function readPeriod(form) {
   if (!form.reportValidity()) return;
@@ -1105,12 +1101,12 @@ function shiftDate(iso,days,months=0){
 function statsPeriod(preset){
   const end=day();
   if(preset==="어제"){const start=shiftDate(end,-1);return {start,end:start};}
-  const start=preset==="1주"?shiftDate(end,-6):preset==="1개월"?shiftDate(end,0,-1):preset==="3개월"?shiftDate(end,0,-3):end;
+  const start=preset==="1주"?shiftDate(end,-6):preset==="1개월"?shiftDate(end,0,-1):preset==="3개월"?shiftDate(end,0,-3):preset==="6개월"?shiftDate(end,0,-6):preset==="이번달"?end.slice(0,7)+"-01":end;
   return {start,end};
 }
 function statsFilter(){
   const id=(demo?"demo":"live")+business;
-  if(!statsFilters.has(id))statsFilters.set(id,{...statsPeriod("1개월"),preset:"1개월",channels:null,basis:"date",sent:false});
+  if(!statsFilters.has(id))statsFilters.set(id,{...statsPeriod("이번달"),preset:"이번달",channels:null,basis:"date",sent:false});
   return statsFilters.get(id);
 }
 const statsColumns=["일자","요일","송장수","주문수","총판매수량","총판매금액","실판매수량","실판매금액","정산예정금액","배송비결제금액","교환수량","교환금액","취소수량","취소금액","반품수량","반품금액"];
@@ -1151,7 +1147,7 @@ function statistics(){
   const body=rows.map(r=>'<tr>'+r.map((v,i)=>'<td class="'+(i<2?'':'money')+'">'+(i<2?esc(v):v==null?'—':fmt.format(v))+'</td>'+(i===5?'<td><div class="bar"><span style="width:'+100*v/peak+'%"></span></div></td>':'')).join("")+'</tr>').join("");
   return head("통계관리","선택한 사업자의 일자별 판매 현황을 조회합니다.",btn("엑셀 다운로드","stats-xlsx"))+
     '<form id="stats-form" class="panel stats-form"><fieldset><legend>판매처</legend><label><input type="checkbox" id="stats-all"'+check(f.channels===null||channels.every(c=>f.channels.includes(c)))+'>전체</label>'+channels.map(c=>'<label><input type="checkbox" name="market" value="'+esc(c)+'"'+check(!f.channels||f.channels.includes(c))+'>'+esc(c)+'</label>').join("")+'</fieldset>'+
-    '<fieldset><legend>기간</legend>'+radios("preset",["오늘","어제","1주","1개월","3개월","지정"].map(x=>[x,x]),f.preset)+'<label><input type="date" name="start" aria-label="시작일" value="'+f.start+'" required></label><label><input type="date" name="end" aria-label="종료일" value="'+f.end+'" required></label></fieldset>'+
+    '<fieldset><legend>기간</legend>'+radios("preset",["오늘","어제","이번달","1주","1개월","3개월","6개월","지정"].map(x=>[x,x]),f.preset)+'<label><input type="date" name="start" aria-label="시작일" value="'+f.start+'" required></label><label><input type="date" name="end" aria-label="종료일" value="'+f.end+'" required></label></fieldset>'+
     '<fieldset><legend>일자 기준</legend>'+radios("basis",[["date","주문일"],["shipDate","발송일"]],f.basis)+'<label><input type="checkbox" name="sent"'+check(f.sent)+'>발송된 건만 표시</label><button type="submit" class="primary">조회</button></fieldset></form>'+
     '<section class="panel">'+panelHead("일자별 판매 현황",'<span>총판매 '+won(rows.reduce((a,r)=>a+r[5],0))+' · 실판매 '+won(rows.reduce((a,r)=>a+r[7],0))+'</span>')+
     '<div class="table-wrap stats-table"><table><thead><tr>'+heading+'</tr></thead><tbody>'+(body||'<tr><td colspan="17" class="empty">조회 조건에 해당하는 판매 내역이 없습니다.</td></tr>')+'</tbody></table></div>'+
@@ -1767,6 +1763,7 @@ document.addEventListener("click",async event=>{
     if((switching||busy)&&action!=="close")return;
     if(action==="share-work"){await shareWork();return;}
     if(action.startsWith("office-")){await officeAction(action.slice(7),item);return;}
+    if(action==="range-preset"){rangeByPage[page()]={...statsPeriod(item.dataset.preset)};render();}
     if(action==="all-dates"){rangeByPage[page()]={start:"",end:""};render();}
     if(action==="business-name")openBusinessName();
     if(action==="business-switch")await changeBusiness(item.dataset.business);
