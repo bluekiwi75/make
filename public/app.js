@@ -47,7 +47,7 @@ function periodOrders(view) {
 }
 function rangeControl(view) {
   const {start, end} = dateRange(view);
-  return '<form class="range-filter" id="period-form"><strong>조회 기간 · '+(view==="purchases"?"매입일":view==="production"?"생산일":"주문일")+'</strong>' +
+  return '<form class="range-filter" id="period-form"><strong>조회 기간 · '+(view==="purchases"?"매입일":view==="stockHistory"?"입고일":view==="production"?"생산일":"주문일")+'</strong>' +
     '<label><input type="date" name="start" aria-label="시작일" value="' + esc(start) + '"></label><span>~</span>' +
     '<label><input type="date" name="end" aria-label="종료일" value="' + esc(end) + '"></label>' +
     '<button type="submit" class="primary">조회</button>' + btn("1주일","range-preset").replace('<button','<button data-preset="1주"') + btn("1개월","range-preset").replace('<button','<button data-preset="1개월"') + btn("3개월","range-preset").replace('<button','<button data-preset="3개월"') + btn("6개월","range-preset").replace('<button','<button data-preset="6개월"') + btn("전체 기간","all-dates") + '</form>';
@@ -822,6 +822,40 @@ async function readStatementFile(file){
   }finally{
     if(statementOperation===controller){statementOperation=null;if($("statement-cancel"))$("statement-cancel").hidden=true;}
   }
+}
+
+// 원물은 입고(+)와 생산 사용(−)을 날짜순으로 쌓아 재고 변화를 보여주고, 상품은 입고 내역과 현재 재고를 보여줍니다.
+function stockHistory(){
+  const {start,end}=dateRange("stockHistory");
+  const inRange=date=>(!start||date>=start)&&(!end||date<=end);
+  const entries=[];
+  (store.purchases||[]).forEach((row,index)=>{
+    if(row.type==="bulk"&&row.totalWeightKg!==undefined)
+      entries.push({date:row.date,order:index,name:rawStockKey(row.name),kind:"입고",who:row.supplier,delta:Math.round(row.totalWeightKg*1000)});
+  });
+  (store.production||[]).forEach((row,index)=>{
+    for(const item of row.recipe?.materials||[])
+      entries.push({date:row.date,order:100000+index,name:rawStockKey(item.name),kind:"생산 사용",who:row.name,delta:-rawStockUse(item,row.qty)});
+  });
+  entries.sort((a,b)=>a.date.localeCompare(b.date)||b.order-a.order);
+  const balance=new Map();
+  for(const entry of entries){
+    balance.set(entry.name,(balance.get(entry.name)||0)+entry.delta);
+    entry.balance=balance.get(entry.name);
+  }
+  const signed=grams=>(grams>0?"+":"−")+rawKg(Math.abs(grams));
+  const rawRows=entries.filter(entry=>inRange(entry.date)).map(entry=>[
+    esc(entry.date),esc(entry.kind),esc(entry.name),esc(entry.who),'<span class="'+(entry.delta<0?"danger":"")+'">'+signed(entry.delta)+'</span>',rawKg(entry.balance)]);
+  const names=new Map((store.products||[]).map(p=>[p.sku,p.name]));
+  const productRows=(store.purchases||[]).filter(row=>row.sku&&inRange(row.date)).sort((a,b)=>a.date.localeCompare(b.date)).map(row=>[
+    esc(row.date),esc(row.supplier),esc(row.name),esc(names.get(row.sku)||row.sku),"+"+fmt.format(row.qty)+" "+esc(row.unit)]);
+  const finalRaw=[...rawStockBalances(store.purchases,store.production).values()].sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  const finalProducts=(store.products||[]).map(p=>[esc(p.name)+'<span class="sub">'+esc(p.sku)+'</span>',fmt.format(p.units),fmt.format(stockUsed(store,p.sku)),'<b>'+fmt.format(p.units-stockUsed(store,p.sku))+'</b>']);
+  return head("재고 내역","입고와 사용 내역을 날짜순으로 보고, 마지막에 최종 재고를 확인합니다.",officeLink("purchaseStatement","매입관리")+officeLink("stock","상품·재고 확인"))+
+    officePanel("원물 재고 내역 · "+rawRows.length+"건",officeTable(["날짜","구분","원물","내용","!변동","!변동 후 재고"],rawRows),"")+
+    officePanel("상품 입고 내역 · "+productRows.length+"건",officeTable(["날짜","매입처","품목","연결 상품","!입고 수량"],productRows),"")+
+    officePanel("최종 재고 · 원물 (현재)",officeTable(["원물","!입고 중량","!생산 사용량","!최종 재고"],finalRaw.map(row=>[esc(row.name),rawKg(row.received),rawKg(row.used),'<b>'+rawKg(row.received-row.used)+'</b>'])))+
+    officePanel("최종 재고 · 상품 (현재)",officeTable(["상품·SKU","!누적 입고 기준수량","!출고 반영","!현재 판매 가능"],finalProducts));
 }
 
 function openPurchase(id){
@@ -1977,7 +2011,7 @@ const officeGroups = [
   ["배송업무", [["?order","신규 주문송장 만들기"],["orders","통합 주문"],["collect","주문수집"],["results","수집 결과확인"],["bundles","묶음누락 점검"],["notes","배송메모 점검"],["matching","상품매칭"],["searchOrders","찾아 바꾸기"],["export","인쇄파일 내보내기"],["invoices","송장번호 가져오기"],["cancelled","취소주문체크"],["shippingWork","발송처리"],["dispatch","송장번호 전송"]]],
   ["송장목록", [["ship","전체송장 목록"],["waitingPrint","인쇄대기 목록"],["waitingShip","발송대기 목록"],["completed","발송완료 목록"],["voidInvoices","취소송장 목록"],["returned","반품송장 목록"],["exchanged","교환송장 목록"]]],
   ["C/S업무", [["support","C/S목록"],["returned","반품관리"],["customers","고객관리"]]],
-  ["사입업무", [["purchaseStatement","매입관리 (거래명세서 입고)"],["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
+  ["사입업무", [["purchaseStatement","매입관리 (거래명세서 입고)"],["stockHistory","재고 내역"],["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
   ["통계", [["statistics","일자별 판매 현황"],["dailyFreight","일자별 배송비 현황"],["marketSales","판매처별 매출 현황"],["skuSales","상품별 매출 현황"],["marketSkuSales","판매처별 상품매출 현황"],["profit","판매 손익"]]],
   ["도구", [["home","시작페이지"],["privacy","개인정보 폐기"],["?clear-export","엑셀 캐시 삭제"],["invoiceSearch","송장 검색"]]],
   ["마켓관리자", [["marketAdmin","판매자센터 바로가기"],["setup","판매처 연결 관리"]]],
@@ -2034,7 +2068,7 @@ function officeRows(type) {
 }
 function officeTable(labels, rows) {
   return '<div class="table-wrap"><table><thead><tr>'+th(labels)+'</tr></thead><tbody>'+
-    (rows.length?rows.map(cells=>'<tr>'+cells.map(cell=>'<td>'+cell+'</td>').join("")+'</tr>').join("")
+    (rows.length?rows.map(cells=>'<tr>'+cells.map((cell,index)=>'<td'+(labels[index]?.startsWith("!")?' class="money"':'')+'>'+cell+'</td>').join("")+'</tr>').join("")
       : '<tr><td class="empty" colspan="'+labels.length+'">표시할 내역이 없습니다.</td></tr>')+'</tbody></table></div>';
 }
 function officePanel(title, body, actions="") {
@@ -2379,6 +2413,7 @@ function editBulkMaterial(name,remove){
 }
 const officeViews = {
   purchaseStatement,
+  stockHistory,
   bulkMaterials:bulkMaterialsView,
   costSheet:costSheetView,
   salesManagement:()=>officeHeading(tabs.salesManagement[0])+
