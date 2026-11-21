@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
 const assets = {};
-for (const [name,type] of [["index.html","text/html"],["app.css","text/css"],["app.js","text/javascript"],["raw-stock.js","text/javascript"],["purchase-scan.html","text/html"],["purchase-scan.js","text/javascript"]]) {
+for (const [name,type] of [["index.html","text/html"],["app.css","text/css"],["app.js","text/javascript"],["raw-stock.js","text/javascript"],["statement.js","text/javascript"],["purchase-scan.html","text/html"],["purchase-scan.js","text/javascript"]]) {
   assets["/" + name] = {type, body: await readFile(new URL("public/" + name, import.meta.url), "utf8")};
 }
 const scanner=assets["/purchase-scan.js"].body.replace(/\r\n?/g,"\n");

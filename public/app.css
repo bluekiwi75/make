@@ -91,3 +91,9 @@
 .bulk-price-form{display:flex;align-items:center;gap:6px}
 .bulk-price-form input{width:7.5rem;text-align:right}
 .purchase-scan-cancel[hidden]{display:none}
+[hidden]{display:none!important}
+.statement-table td input,.statement-table td select{width:100%;min-width:0}
+.statement-table td input[type=number]{width:96px}
+.statement-table td input[data-statement-field=name]{min-width:150px}
+.statement-table td select[data-statement-field=sku]{min-width:190px}
+.statement-table td input[type=checkbox]{width:auto}

@@ -701,6 +701,112 @@ function purchases(){
     '<div class="table-wrap"><table><thead><tr>'+th(["매입일","매입처","구분","품목","!수량","!총 중량","!박스당 포장 수","!공급 단가","!공급가액","!부가세","!합계","결제 여부","!누적 결제액","!남은 잔액","결제 예정일","메모","작업"])+'</tr></thead><tbody>'+
     (body||'<tr><td class="empty" colspan="17">선택한 기간에 매입 내역이 없습니다.</td></tr>')+'</tbody></table></div></section>';
 }
+let statementDraft=null,statementOperation=null,statementScanner={frame:null,ready:false};
+const statementUnitsList=["kg","봉","개","박스"];
+function statementEmpty(){return {date:day(),supplier:"",rows:[],status:"",text:""};}
+function statementRowHtml(row,index){
+  const products=store.products||[];
+  return '<tr><td><input type="checkbox" data-statement-row="'+index+'" data-statement-field="use"'+(row.use?' checked':'')+' aria-label="재고에 반영"></td>'+
+    '<td><input data-statement-row="'+index+'" data-statement-field="name" value="'+esc(row.name)+'" maxlength="120" aria-label="품목명"></td>'+
+    '<td><select data-statement-row="'+index+'" data-statement-field="sku" aria-label="연결할 상품"><option value="">재고 반영 안 함</option>'+
+      products.map(p=>'<option value="'+esc(p.sku)+'"'+(p.sku===row.sku?' selected':'')+'>'+esc(p.name+" ("+p.sku+")")+'</option>').join("")+'</select></td>'+
+    '<td><input type="number" min="0" step="any" data-statement-row="'+index+'" data-statement-field="qty" value="'+esc(row.qty)+'" aria-label="수량"></td>'+
+    '<td><select data-statement-row="'+index+'" data-statement-field="unit" aria-label="단위">'+options(statementUnitsList,row.unit)+'</select></td>'+
+    '<td><input type="number" min="0" step="1" data-statement-row="'+index+'" data-statement-field="price" value="'+esc(row.price)+'" aria-label="공급 단가"></td>'+
+    '<td><input type="number" min="0" step="1" data-statement-row="'+index+'" data-statement-field="vat" value="'+esc(row.vat)+'" aria-label="부가세"></td></tr>';
+}
+function purchaseStatement(){
+  const draft=statementDraft??=statementEmpty();
+  const history=(store.purchases||[]).filter(row=>row.sku).sort((a,b)=>b.date.localeCompare(a.date));
+  const names=new Map((store.products||[]).map(p=>[p.sku,p.name]));
+  const rows=draft.rows;
+  const summary=rows.filter(r=>r.use&&r.sku).length;
+  return officeHeading("매입관리",officeLink("purchases","사입 목록")+officeLink("stock","상품·재고 확인"))+
+    '<section class="panel">'+panelHead("1. 거래명세서 올리기")+'<div class="settings">'+
+    '<label>PDF·JPG 거래명세서<input type="file" id="statement-file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"></label>'+
+    '<div class="buttons"><button type="button" class="short" id="statement-cancel" data-action="statement-cancel" hidden>읽기 중지</button></div>'+
+    '<p class="muted" id="statement-status" role="status">'+esc(draft.status||"앞 5쪽까지 읽어 품목, 수량, 단가를 표로 만듭니다. 스캔 이미지는 글자 인식으로 읽어 시간이 걸릴 수 있습니다.")+'</p>'+
+    '<details><summary>문서가 읽히지 않으면 내용을 붙여넣어 분석</summary>'+
+    '<textarea id="statement-text" rows="6" style="width:100%;margin:8px 0" placeholder="품목 수량 단가 공급가액 순서의 줄을 붙여넣어 주세요.">'+esc(draft.text)+'</textarea>'+
+    btn("붙여넣은 내용 분석","statement-parse")+'</details></div></section>'+
+    '<section class="panel">'+panelHead("2. 읽은 내용 확인 · "+rows.length+"개 품목",
+      rows.length?btn("초기화","statement-reset"):"")+
+    '<form id="statement-form" class="fields">'+
+    '<label>매입일<input type="date" id="statement-date" value="'+esc(draft.date)+'"></label>'+
+    '<label>매입처<input id="statement-supplier" list="office-suppliers" value="'+esc(draft.supplier)+'" maxlength="120"><datalist id="office-suppliers">'+
+      officeRows("suppliers").map(item=>'<option value="'+esc(item.name)+'"></option>').join("")+'</datalist></label></form>'+
+    '<div class="table-wrap"><table class="statement-table"><thead><tr>'+th(["반영","품목명","연결 상품","!수량","단위","!공급 단가","!부가세"])+'</tr></thead><tbody>'+
+    (rows.length?rows.map(statementRowHtml).join(""):'<tr><td class="empty" colspan="7">거래명세서를 올리면 품목이 여기에 표시됩니다.</td></tr>')+'</tbody></table></div>'+
+    '<div class="settings"><p class="muted">체크한 품목의 수량이 연결 상품의 “누적 입고 기준수량”에 더해지고, 매입 내역(특이 제품)에도 기록됩니다. 값을 확인한 뒤 반영하세요.</p>'+
+    '<div class="form-error" id="statement-error" role="alert"></div>'+
+    '<div><button type="button" class="primary" data-action="statement-apply"'+(summary?'':' disabled')+'>재고에 반영 ('+summary+'건)</button></div></div></section>'+
+    '<section class="panel">'+panelHead("재고 반영 내역 · "+history.length+"건")+
+    officeTable(["매입일","매입처","품목","연결 상품","!반영 수량","!공급가액"],history.map(row=>[
+      esc(row.date),esc(row.supplier),esc(row.name),esc(names.get(row.sku)||row.sku),
+      fmt.format(row.qty)+" "+esc(row.unit),won(purchaseSupply(row))]))+'</section>';
+}
+function statementApplyRows(draft){
+  const picked=draft.rows.filter(row=>row.use&&row.sku);
+  if(!picked.length)throw Error("재고에 반영할 품목을 선택해 주세요.");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.date))throw Error("매입일을 입력해 주세요.");
+  if(!draft.supplier.trim())throw Error("매입처를 입력해 주세요.");
+  const skuTotals=new Map();
+  const records=picked.map(row=>{
+    const qty=Number(row.qty),price=Number(row.price),vat=row.vat===""||row.vat==null?0:Number(row.vat);
+    if(!row.name.trim())throw Error("품목명을 입력해 주세요.");
+    if(!Number.isFinite(qty)||qty<=0)throw Error(row.name+": 수량을 확인해 주세요.");
+    if(!Number.isInteger(qty))throw Error(row.name+": 재고는 정수 수량으로 반영됩니다. 수량을 정수로 고쳐 주세요.");
+    if(!Number.isSafeInteger(price)||price<0||!Number.isSafeInteger(vat)||vat<0)throw Error(row.name+": 단가와 부가세는 0 이상의 정수로 입력해 주세요.");
+    skuTotals.set(row.sku,(skuTotals.get(row.sku)||0)+qty);
+    return {id:crypto.randomUUID(),date:draft.date,supplier:draft.supplier.trim(),name:row.name.trim(),memo:"거래명세서 재고 반영",
+      type:"special",unit:row.unit,qty,price,vat,paymentStatus:"unpaid",sku:row.sku};
+  });
+  return {records,skuTotals};
+}
+async function applyStatement(){
+  const draft=statementDraft;
+  const {records,skuTotals}=statementApplyRows(draft);
+  const products=store.products.map(p=>skuTotals.has(p.sku)?{...p,units:p.units+skuTotals.get(p.sku)}:p);
+  await commit({...store,products,purchases:[...records,...(store.purchases||[])]});
+  const count=records.length;
+  statementDraft=statementEmpty();
+  render();
+  notify("거래명세서 "+count+"개 품목을 재고에 반영했습니다.");
+}
+function fillStatement(text,statusText){
+  const draft=statementDraft??=statementEmpty();
+  const parsed=parseStatement(text);
+  if(parsed.date)draft.date=parsed.date;
+  if(parsed.supplier)draft.supplier=parsed.supplier;
+  draft.rows=parsed.items.map(item=>({name:item.name,qty:item.qty,unit:item.unit,price:item.price,vat:item.vat??"",
+    sku:matchStatementProduct(item.name,store.products||[]),use:true}));
+  draft.rows.forEach(row=>{if(!row.sku)row.use=false;});
+  const unmatched=draft.rows.filter(r=>!r.sku).length;
+  draft.status=statusText+" · "+(parsed.items.length?parsed.items.length+"개 품목을 찾았습니다."+(unmatched?" 상품을 연결하지 못한 "+unmatched+"개는 직접 선택해 주세요.":" 값이 맞는지 확인해 주세요."):"품목 줄을 찾지 못했습니다. 아래 붙여넣기로 내용을 확인할 수 있습니다.");
+  render();
+}
+async function readStatementFile(file){
+  const error=purchaseDocumentError(file);
+  const status=$("statement-status");
+  if(error){status.textContent=error;return;}
+  statementOperation?.abort();
+  const controller=new AbortController();
+  statementOperation=controller;
+  $("statement-cancel").hidden=false;
+  status.textContent=file.name+" 읽는 중입니다…";
+  try{
+    const {text,pagesRead,totalPages}=await scanPurchaseFile(statementScanner,file,/\.pdf$/i.test(file.name)?5:1,controller.signal,
+      message=>{if(!controller.signal.aborted&&$("statement-status"))$("statement-status").textContent=message;});
+    if(controller.signal.aborted)return;
+    (statementDraft??=statementEmpty()).text=text.trim();
+    fillStatement(text,file.name+(totalPages>pagesRead?" · "+totalPages+"쪽 중 앞 "+pagesRead+"쪽":""));
+  }catch(error){
+    if(!controller.signal.aborted&&$("statement-status"))$("statement-status").textContent=error.message;
+  }finally{
+    if(statementOperation===controller){statementOperation=null;if($("statement-cancel"))$("statement-cancel").hidden=true;}
+  }
+}
+
 function openPurchase(id){
   const rows=store.purchases||[];
   const row=rows.find(record=>record.id===id)||{id:crypto.randomUUID(),date:day(),supplier:"",name:"",qty:"",price:"",unit:"kg",memo:""};
@@ -1660,6 +1766,17 @@ document.addEventListener("click",async event=>{
       $("content").querySelectorAll('[name="workflow-order"]').forEach(input=>input.checked=action==="workflow-all");
     }
     if(action==="purchase-entry")openPurchase(item.dataset.id);
+    if(action==="statement-cancel"){statementOperation?.abort();$("statement-status").textContent="문서 읽기를 중지했습니다.";$("statement-cancel").hidden=true;}
+    if(action==="statement-reset"){statementDraft=statementEmpty();render();}
+    if(action==="statement-parse"){
+      const text=$("statement-text").value;
+      (statementDraft??=statementEmpty()).text=text;
+      fillStatement(text,"붙여넣은 내용");
+    }
+    if(action==="statement-apply"){
+      try{await applyStatement();}
+      catch(error){$("statement-error").textContent=error.message;}
+    }
     if(action==="production-entry")openProduction(item.dataset.id);
     if(action==="product")openProduct(item.dataset.id);
     if(action==="product-template")download("product-import-template.xlsx",[productColumns.map(([,label])=>label)]);
@@ -1842,7 +1959,7 @@ const officeGroups = [
   ["배송업무", [["?order","신규 주문송장 만들기"],["orders","통합 주문"],["collect","주문수집"],["results","수집 결과확인"],["bundles","묶음누락 점검"],["notes","배송메모 점검"],["matching","상품매칭"],["searchOrders","찾아 바꾸기"],["export","인쇄파일 내보내기"],["invoices","송장번호 가져오기"],["cancelled","취소주문체크"],["shippingWork","발송처리"],["dispatch","송장번호 전송"]]],
   ["송장목록", [["ship","전체송장 목록"],["waitingPrint","인쇄대기 목록"],["waitingShip","발송대기 목록"],["completed","발송완료 목록"],["voidInvoices","취소송장 목록"],["returned","반품송장 목록"],["exchanged","교환송장 목록"]]],
   ["C/S업무", [["support","C/S목록"],["returned","반품관리"],["customers","고객관리"]]],
-  ["사입업무", [["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
+  ["사입업무", [["purchaseStatement","매입관리 (거래명세서 입고)"],["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
   ["통계", [["statistics","일자별 판매 현황"],["dailyFreight","일자별 배송비 현황"],["marketSales","판매처별 매출 현황"],["skuSales","상품별 매출 현황"],["marketSkuSales","판매처별 상품매출 현황"],["profit","판매 손익"]]],
   ["도구", [["home","시작페이지"],["privacy","개인정보 폐기"],["?clear-export","엑셀 캐시 삭제"],["invoiceSearch","송장 검색"]]],
   ["마켓관리자", [["marketAdmin","판매자센터 바로가기"],["setup","판매처 연결 관리"]]],
@@ -2243,6 +2360,7 @@ function editBulkMaterial(name,remove){
   form.elements.name.readOnly=!!nameInUse;
 }
 const officeViews = {
+  purchaseStatement,
   bulkMaterials:bulkMaterialsView,
   costSheet:costSheetView,
   salesManagement:()=>officeHeading(tabs.salesManagement[0])+
@@ -2390,6 +2508,27 @@ $("nav").addEventListener("keydown",event=>{
 $("content").addEventListener("input",event=>{
   if(event.target.id==="office-order-query")$("office-order-results").innerHTML=orderTable(officeOrderRows(page(),event.target.value),true);
 });
+$("content").addEventListener("change",event=>{
+  const target=event.target;
+  if(target.id==="statement-file"){const file=target.files[0];target.value="";if(file)void readStatementFile(file);}
+});
+function updateStatementDraft(event){
+  const target=event.target,draft=statementDraft;
+  if(!draft)return;
+  if(target.id==="statement-date")draft.date=target.value;
+  else if(target.id==="statement-supplier")draft.supplier=target.value;
+  else if(target.id==="statement-text")draft.text=target.value;
+  else if(target.dataset.statementRow!==undefined){
+    const row=draft.rows[Number(target.dataset.statementRow)],field=target.dataset.statementField;
+    if(!row)return;
+    row[field]=field==="use"?target.checked:target.value;
+    if(field==="sku"&&event.type==="change"){row.use=Boolean(row.sku);render();return;}
+    if(field==="use"||field==="sku"){const button=$("content").querySelector('[data-action="statement-apply"]');
+      const n=draft.rows.filter(r=>r.use&&r.sku).length;button.disabled=!n;button.textContent="재고에 반영 ("+n+"건)";}
+  }
+}
+$("content").addEventListener("input",updateStatementDraft);
+$("content").addEventListener("change",updateStatementDraft);
 if(location.hostname==="127.0.0.1"||location.hostname==="localhost"){demo=true;demoStores=makeDemoStores();}
 render();
 load().catch(error=>{
