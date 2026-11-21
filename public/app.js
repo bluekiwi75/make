@@ -1324,7 +1324,7 @@ function render() {
   renderBusiness();
   if(!ready)return;
   const output=Object.hasOwn(queues,p)?queueView(p):Object.hasOwn(officeViews,p)?officeViews[p]():{home:dashboard,orders:()=>orders(false),ship:()=>orders(true),stock,profit,purchases,production,statistics,setup:settings,collect:collectionPage,export:()=>orders(false),dispatch:()=>orders(true),invoices:invoiceImportPage}[p]();
-  $("content").innerHTML=officeWorkspace()+(demo?'<div class="note">샘플 화면 · '+btn("체험 종료","demo")+'</div>':'')+output;
+  $("content").innerHTML=officeWorkspace()+output;
   if(p==="export"||p==="printFolder")renderPrintFolder();
   if(["setup","collect","marketAdmin"].includes(p)&&!demo&&!marketLoaded&&!marketLoading)void loadMarkets();
 }
