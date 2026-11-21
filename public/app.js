@@ -302,6 +302,7 @@ function dashboard() {
   const counts=Object.fromEntries(states.map(s=>[s,period.filter(o=>o.status===s).length]));
   return head("주문 운영 대시보드","판매처별 주문, 출고 현황과 판매 손익을 확인합니다.",btn(bfile+" CSV·엑셀 가져오기","import")+btn(bplus+" 주문 등록","order",true))+
   '<div class="cards">'+card("기간 판매금액",won(totals[0]),"취소·반품 제외")+card("기간 판매이익",pending&&pending===current.length?"—":won(totals[1]),pending?"비용 확인 전 "+pending+"건 제외":"원가·수수료·배송비 등 차감")+card("발송 대기",fmt.format(counts.신규+counts.포장중)+"건","신규 + 포장중")+card("현재 재고 부족",store.products.filter(p=>p.units-stockUsed(store,p.sku)<=p.limit).length+"개","안전재고 이하 상품")+'</div>'+
+  dashboardSchedule()+
   '<section class="panel">'+panelHead("기간 제품별 판매 랭킹",
     '<select id="product-ranking-metric" aria-label="제품별 랭킹 기준">'+
     options([["gross","판매금액"],["qty","판매수량"]],productRankingMetric)+'</select>')+
@@ -925,6 +926,34 @@ function deleteSchedule(id){
 }
 async function toggleSchedule(id){
   await commit({...store,schedules:(store.schedules||[]).map(item=>item.id===id?{...item,done:!item.done}:item)});
+}
+
+// 대시보드: 지연된 스케줄과 오늘부터 7일 안의 스케줄, 결제 예정을 보여줍니다.
+function dashboardSchedule(){
+  const today=day(), until=shiftDate(today,7);
+  const label=date=>{
+    if(date===today)return "오늘";
+    if(date===shiftDate(today,1))return "내일";
+    const weekday=weekdayNames[new Date(date+"T00:00:00Z").getUTCDay()];
+    return date.slice(5).replace("-","/")+" ("+weekday+")";
+  };
+  const open=(store.schedules||[]).filter(row=>!row.done&&row.date<=until);
+  const due=scheduleDueRows().filter(row=>row.date<=until);
+  const rows=[
+    ...open.map(row=>({date:row.date,late:row.date<today,html:
+      '<div class="schedule-item"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'" aria-label="완료">'+
+      '<span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span></div>'})),
+    ...due.map(row=>({date:row.date,late:row.date<today,html:
+      '<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+'</span></span></div>'}))
+  ].sort((a,b)=>a.date.localeCompare(b.date));
+  const shown=rows.slice(0,8);
+  const late=rows.filter(row=>row.late).length;
+  const body=shown.length?'<div class="table-wrap"><table class="schedule-table"><tbody>'+shown.map(row=>
+    '<tr class="'+(row.date===today?"today":"")+'"><td class="schedule-date'+(row.late?' danger':'')+'">'+esc(label(row.date))+(row.late?'<span class="sub danger">지연</span>':'')+'</td><td class="schedule-cell">'+row.html+'</td></tr>').join("")+'</tbody></table></div>'+
+    (rows.length>shown.length?'<p class="totals">외 '+(rows.length-shown.length)+'건은 월별 스케줄에서 확인하세요.</p>':'')
+    :'<p class="empty">오늘부터 7일 안에 예정된 스케줄이 없습니다.</p>';
+  return '<section class="panel" id="dashboard-schedule">'+panelHead("다가오는 스케줄 · 7일"+(late?" · 지연 "+late+"건":""),
+    '<button type="button" data-action="schedule-add" data-date="'+today+'">'+bplus+' 추가</button><a class="button short" href="#schedule">월별 스케줄</a>')+body+'</section>';
 }
 
 function openPurchase(id){
