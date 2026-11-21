@@ -115,7 +115,7 @@
 .cal-head,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .cal-head span{text-align:center;font-size:12px;font-weight:750;color:var(--muted);padding:4px 0}
 .cal-head .sun,.cal-cell.sun b{color:#a33d2f}.cal-head .sat,.cal-cell.sat b{color:#2f6fa8}
-.cal-cell{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-height:92px;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:left;font-weight:500;white-space:normal}
+.cal-cell{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-height:76px;min-width:0;padding:6px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:left;font-weight:500;white-space:normal}
 .cal-cell.blank{border:0;background:transparent;min-height:0}
 .cal-cell.today{background:#f1f7e8}
 .cal-cell.selected{outline:2px solid var(--green);outline-offset:-1px}
@@ -124,13 +124,6 @@
 .cal-item.done{text-decoration:line-through;opacity:.6}
 .cal-item.pay{background:#fff2d9;color:#775319}
 .cal-more{font-size:11px;color:var(--muted)}
-.cal-dots{display:flex;gap:3px;margin-top:auto;padding-top:2px}
-.cal-dots i{width:7px;height:7px;border-radius:50%;background:#dfe7df}
-.cal-dots i.on{background:var(--green)}
-.cal-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.cal-detail{display:block;padding:12px 18px 18px;border-top:1px solid var(--line)}
 .cal-detail h3{margin:0 0 8px;font-size:15px}
-.check-grid{display:grid;gap:6px}
-.check-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:700;cursor:pointer}
-.check-item.on{background:#eaf3dd;border-color:#cfe2bd}
-.check-item input{width:18px;height:18px;min-height:0;accent-color:var(--green)}
-@media(max-width:760px){.cal{padding:0 8px 8px}.cal-cell{min-height:58px;padding:4px}.cal-item,.cal-more{display:none}.cal-detail{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.cal{padding:0 8px 8px}.cal-cell{min-height:58px;padding:4px}.cal-item,.cal-more{display:none}}

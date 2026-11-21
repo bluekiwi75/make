@@ -930,25 +930,6 @@ async function toggleSchedule(id){
 
 // 대시보드: 월 달력. 날짜마다 일정과 "스케줄 1~5" 체크 칸을 보여줍니다.
 let dashDay=null;
-const defaultCheckNames=["스케줄 1","스케줄 2","스케줄 3","스케줄 4","스케줄 5"];
-const checkNames=()=>store.scheduleChecks?.names||defaultCheckNames;
-const checksFor=date=>{const row=store.scheduleChecks?.days?.[date];return Array.from({length:5},(_,i)=>Boolean(row?.[i]));};
-async function toggleCheck(date,index){
-  const names=checkNames(), days={...(store.scheduleChecks?.days||{})};
-  const row=checksFor(date);
-  row[index]=!row[index];
-  if(row.some(Boolean))days[date]=row;else delete days[date];
-  await commit({...store,scheduleChecks:{names,days}});
-}
-function openCheckNames(){
-  const names=checkNames();
-  formDialog("스케줄 체크 이름",names.map((name,i)=>'<label class="wide">체크 '+(i+1)+'<input name="n'+i+'" maxlength="30" value="'+esc(name)+'" required></label>').join(""),
-    async values=>{
-      const next=names.map((_,i)=>values["n"+i].trim());
-      if(next.some(name=>!name))throw Error("이름을 모두 입력해 주세요.");
-      await commit({...store,scheduleChecks:{names:next,days:{...(store.scheduleChecks?.days||{})}}});
-    });
-}
 function dashboardSchedule(){
   const today=day();
   const [year,month]=scheduleMonth.split("-").map(Number);
@@ -963,22 +944,17 @@ function dashboardSchedule(){
   for(let d=1;d<=days;d++){
     const date=scheduleMonth+"-"+pad2(d), weekday=(lead+d-1)%7;
     const list=items.filter(row=>row.date===date), dueList=due.filter(row=>row.date===date);
-    const marks=checksFor(date), count=marks.filter(Boolean).length;
     const shown=list.slice(0,2);
-    cells.push('<button type="button" class="cal-cell'+(date===today?" today":"")+(date===selected?" selected":"")+(weekday===0?" sun":weekday===6?" sat":"")+'" data-action="calendar-day" data-date="'+date+'" aria-label="'+month+'월 '+d+'일'+(list.length?", 일정 "+list.length+"건":"")+(count?", 체크 "+count+"/5":"")+'">'+
+    cells.push('<button type="button" class="cal-cell'+(date===today?" today":"")+(date===selected?" selected":"")+(weekday===0?" sun":weekday===6?" sat":"")+'" data-action="calendar-day" data-date="'+date+'" aria-label="'+month+'월 '+d+'일'+(list.length?", 일정 "+list.length+"건":"")+'">'+
       '<b>'+d+'</b>'+shown.map(row=>'<span class="cal-item'+(row.done?" done":"")+'">'+esc(row.title)+'</span>').join("")+
       (list.length>shown.length?'<span class="cal-more">+'+(list.length-shown.length)+'건</span>':"")+(dueList.length?'<span class="cal-item pay">결제 예정 '+dueList.length+'</span>':"")+
-      '<span class="cal-dots" aria-hidden="true">'+marks.map(on=>'<i'+(on?' class="on"':'')+'></i>').join("")+'</span></button>');
+      '</button>');
   }
   const dayItems=(store.schedules||[]).filter(row=>row.date===selected);
   const dayDue=scheduleDueRows().filter(row=>row.date===selected);
-  const marks=checksFor(selected), names=checkNames();
   const selectedDate=new Date(selected+"T00:00:00Z");
-  const detail='<div class="cal-detail"><div><h3>'+(selectedDate.getUTCMonth()+1)+'월 '+selectedDate.getUTCDate()+'일 ('+weekdayNames[selectedDate.getUTCDay()]+')'+(selected===today?' · 오늘':'')+'</h3>'+
-    '<div class="check-grid" role="group" aria-label="스케줄 체크">'+names.map((name,i)=>
-      '<label class="check-item'+(marks[i]?" on":"")+'"><input type="checkbox" data-action="check-toggle" data-date="'+selected+'" data-index="'+i+'"'+(marks[i]?" checked":"")+'><span>'+esc(name)+'</span></label>').join("")+'</div>'+
-    '<p class="totals">체크 '+marks.filter(Boolean).length+'/5 <button type="button" class="short" data-action="check-names">이름 바꾸기</button></p></div>'+
-    '<div><h3>일정</h3>'+(dayItems.length||dayDue.length?dayItems.map(row=>
+  const detail='<div class="cal-detail"><div><h3>'+(selectedDate.getUTCMonth()+1)+'월 '+selectedDate.getUTCDate()+'일 ('+weekdayNames[selectedDate.getUTCDay()]+')'+(selected===today?' · 오늘':'')+' 일정</h3>'+
+    (dayItems.length||dayDue.length?dayItems.map(row=>
       '<div class="schedule-item'+(row.done?" done":"")+'"><input type="checkbox" data-action="schedule-done" data-id="'+esc(row.id)+'"'+(row.done?" checked":"")+' aria-label="완료"><span class="tag">'+esc(row.kind)+'</span><span class="schedule-title">'+esc(row.title)+(row.memo?'<span class="sub">'+esc(row.memo)+'</span>':'')+'</span>'+
       '<button type="button" class="short" data-action="schedule-edit" data-id="'+esc(row.id)+'">수정</button></div>').join("")+
       dayDue.map(row=>'<div class="schedule-item due"><span class="tag wait">결제 예정</span><span class="schedule-title">'+esc(row.supplier)+' · '+esc(row.name)+'<span class="sub">남은 잔액 '+won(row.left)+'</span></span></div>').join(""):'<p class="empty">이 날짜에 등록된 일정이 없습니다.</p>')+
@@ -1951,8 +1927,6 @@ document.addEventListener("click",async event=>{
     if(action==="purchase-entry")openPurchase(item.dataset.id);
     if(action==="statement-cancel"){statementOperation?.abort();$("statement-status").textContent="문서 읽기를 중지했습니다.";$("statement-cancel").hidden=true;}
     if(action==="calendar-day"){dashDay=item.dataset.date;render();}
-    if(action==="check-toggle")await toggleCheck(item.dataset.date,Number(item.dataset.index));
-    if(action==="check-names")openCheckNames();
     if(action==="schedule-add")openSchedule(null,item.dataset.date);
     if(action==="schedule-edit")openSchedule(item.dataset.id);
     if(action==="schedule-delete")deleteSchedule(item.dataset.id);
