@@ -11,6 +11,10 @@
 - 운영 사이트(Sites, D1, R2)와 실제 데이터에는 접근하지 않습니다. 샘플 모드(`node run-local.mjs`, 8787 포트)에서 확인합니다.
 - 조회 기간 기본값은 이번 달 1일 ~ 오늘이며 `1주일/1개월/3개월/6개월/전체 기간` 버튼이 있습니다.
 
+## 로드맵 아티팩트
+- 주소: https://claude.ai/artifact/MkxnZ8tSxoDmy9e6uheaGN, 원본 `docs/roadmap.html`. 한 일, 해야 할 일, 메뉴 지도를 담고 있습니다.
+- 작업을 마칠 때 `DONE`(한 일)과 `TODO`(해야 할 일) 배열, 기준 시각, 최근 작업 번호를 고치고 위 `url`로 다시 게시합니다.
+
 ## 구조
 - `public/app.js` 프런트엔드 전체(약 2,500줄). 샘플 모드는 `127.0.0.1`/`localhost`에서만 켜집니다.
 - `public/statement.js` 거래명세서 텍스트 파서와 상품 매칭. `public/purchase-scan.js` PDF·이미지 읽기(iframe), `pageText()`가 글자 좌표로 줄을 다시 묶습니다.
