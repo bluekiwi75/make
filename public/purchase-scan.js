@@ -26,6 +26,37 @@ async function recognize(reader,input){
   return data.text;
 }
 
+function pageText(items) {
+  const cells = [], seen = new Map();
+  for (const item of items) {
+    const str = item.str;
+    if (!str || !str.trim() || !item.transform) continue;
+    const x = item.transform[4], y = item.transform[5];
+    const same = seen.get(str) || [];
+    if (same.some(c => Math.abs(c.x - x) < 1.5 && Math.abs(c.y - y) < 1.5)) continue;
+    const cell = {str, x, y, end: x + (item.width || 0)};
+    same.push(cell);
+    seen.set(str, same);
+    cells.push(cell);
+  }
+  cells.sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines = [];
+  for (const cell of cells) {
+    const line = lines[lines.length - 1];
+    if (line && Math.abs(line.y - cell.y) <= 3) line.cells.push(cell);
+    else lines.push({y: cell.y, cells: [cell]});
+  }
+  return lines.map(line => {
+    line.cells.sort((a, b) => a.x - b.x);
+    let text = "", end = null;
+    for (const cell of line.cells) {
+      text += (end !== null && cell.x - end < 1 ? "" : " ") + cell.str;
+      end = cell.end;
+    }
+    return text.trim();
+  }).join("\n");
+}
+
 async function readDocument(file, pageLimit, progress) {
   if (!/\.pdf$/i.test(file.name)) {
     progress("이미지에서 글자를 읽는 중…");
@@ -68,7 +99,7 @@ async function readDocument(file, pageLimit, progress) {
       progress("PDF "+index+"/"+count+"쪽에서 텍스트 확인 중…");
       const page = await Promise.race([pdf.getPage(index),rangeFailure]);
       const { items } = await Promise.race([page.getTextContent(),rangeFailure]);
-      const text = items.map(item => (item.str || "") + (item.hasEOL ? "\n" : " ")).join("");
+      const text = pageText(items);
       if (text.trim().length >= 30) {
         pages.push(text);
         continue;

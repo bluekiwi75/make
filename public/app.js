@@ -706,21 +706,24 @@ const statementUnitsList=["kg","봉","개","박스"];
 function statementEmpty(){return {date:day(),supplier:"",rows:[],status:"",text:""};}
 function statementRowHtml(row,index){
   const products=store.products||[];
-  return '<tr><td><input type="checkbox" data-statement-row="'+index+'" data-statement-field="use"'+(row.use?' checked':'')+' aria-label="재고에 반영"></td>'+
-    '<td><input data-statement-row="'+index+'" data-statement-field="name" value="'+esc(row.name)+'" maxlength="120" aria-label="품목명"></td>'+
-    '<td><select data-statement-row="'+index+'" data-statement-field="sku" aria-label="연결할 상품"><option value="">재고 반영 안 함</option>'+
-      products.map(p=>'<option value="'+esc(p.sku)+'"'+(p.sku===row.sku?' selected':'')+'>'+esc(p.name+" ("+p.sku+")")+'</option>').join("")+'</select></td>'+
-    '<td><input type="number" min="0" step="any" data-statement-row="'+index+'" data-statement-field="qty" value="'+esc(row.qty)+'" aria-label="수량"></td>'+
-    '<td><select data-statement-row="'+index+'" data-statement-field="unit" aria-label="단위">'+options(statementUnitsList,row.unit)+'</select></td>'+
-    '<td><input type="number" min="0" step="1" data-statement-row="'+index+'" data-statement-field="price" value="'+esc(row.price)+'" aria-label="공급 단가"></td>'+
-    '<td><input type="number" min="0" step="1" data-statement-row="'+index+'" data-statement-field="vat" value="'+esc(row.vat)+'" aria-label="부가세"></td></tr>';
+  const attrs='data-statement-row="'+index+'" data-statement-field=';
+  return '<tr><td><input type="checkbox" '+attrs+'"use"'+(row.use?' checked':'')+' aria-label="재고에 반영"></td>'+
+    '<td><input '+attrs+'"name" list="statement-materials" value="'+esc(row.name)+'" maxlength="120" aria-label="품목명"></td>'+
+    '<td><select '+attrs+'"target" aria-label="반영 대상">'+
+      '<option value="">반영 안 함</option><option value="m"'+(row.target==="m"?' selected':'')+'>벌크 원물 재고 (kg)</option>'+
+      '<optgroup label="상품 재고">'+products.map(p=>'<option value="p:'+esc(p.sku)+'"'+(row.target==="p:"+p.sku?' selected':'')+'>'+esc(p.name+" ("+p.sku+")")+'</option>').join("")+'</optgroup></select></td>'+
+    '<td><input type="number" min="0" step="any" '+attrs+'"qty" value="'+esc(row.qty)+'" aria-label="수량"></td>'+
+    '<td><select '+attrs+'"unit" aria-label="단위">'+options(statementUnitsList,row.unit)+'</select></td>'+
+    '<td><input type="number" min="0" step="any" '+attrs+'"specKg" value="'+esc(row.specKg)+'" aria-label="박스당 kg"></td>'+
+    '<td><input type="number" min="0" step="1" '+attrs+'"price" value="'+esc(row.price)+'" aria-label="공급 단가"></td>'+
+    '<td><input type="number" min="0" step="1" '+attrs+'"vat" value="'+esc(row.vat)+'" aria-label="부가세"></td></tr>';
 }
 function purchaseStatement(){
   const draft=statementDraft??=statementEmpty();
-  const history=(store.purchases||[]).filter(row=>row.sku).sort((a,b)=>b.date.localeCompare(a.date));
+  const history=(store.purchases||[]).filter(row=>row.sku||row.statement).sort((a,b)=>b.date.localeCompare(a.date));
   const names=new Map((store.products||[]).map(p=>[p.sku,p.name]));
   const rows=draft.rows;
-  const summary=rows.filter(r=>r.use&&r.sku).length;
+  const summary=rows.filter(r=>r.use&&r.target).length;
   return officeHeading("매입관리",officeLink("purchases","사입 목록")+officeLink("stock","상품·재고 확인"))+
     '<section class="panel">'+panelHead("1. 거래명세서 올리기")+'<div class="settings">'+
     '<label>PDF·JPG 거래명세서<input type="file" id="statement-file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"></label>'+
@@ -735,31 +738,40 @@ function purchaseStatement(){
     '<label>매입일<input type="date" id="statement-date" value="'+esc(draft.date)+'"></label>'+
     '<label>매입처<input id="statement-supplier" list="office-suppliers" value="'+esc(draft.supplier)+'" maxlength="120"><datalist id="office-suppliers">'+
       officeRows("suppliers").map(item=>'<option value="'+esc(item.name)+'"></option>').join("")+'</datalist></label></form>'+
-    '<div class="table-wrap"><table class="statement-table"><thead><tr>'+th(["반영","품목명","연결 상품","!수량","단위","!공급 단가","!부가세"])+'</tr></thead><tbody>'+
-    (rows.length?rows.map(statementRowHtml).join(""):'<tr><td class="empty" colspan="7">거래명세서를 올리면 품목이 여기에 표시됩니다.</td></tr>')+'</tbody></table></div>'+
-    '<div class="settings"><p class="muted">체크한 품목의 수량이 연결 상품의 “누적 입고 기준수량”에 더해지고, 매입 내역(특이 제품)에도 기록됩니다. 값을 확인한 뒤 반영하세요.</p>'+
+    '<datalist id="statement-materials">'+activeBulkMaterials().map(item=>'<option value="'+esc(item.name)+'"></option>').join("")+'</datalist><div class="table-wrap"><table class="statement-table"><thead><tr>'+th(["반영","품목명","반영 대상","!수량","단위","!박스당 kg","!공급 단가","!부가세"])+'</tr></thead><tbody>'+
+    (rows.length?rows.map(statementRowHtml).join(""):'<tr><td class="empty" colspan="8">거래명세서를 올리면 품목이 여기에 표시됩니다.</td></tr>')+'</tbody></table></div>'+
+    '<div class="settings"><p class="muted">상품에 연결한 품목은 “누적 입고 기준수량”에 수량이 더해지고, 벌크 원물은 박스 수 × 박스당 kg 만큼 원물 재고가 늘어납니다. 두 경우 모두 사입 목록에 기록됩니다. 값을 확인한 뒤 반영하세요.</p>'+
     '<div class="form-error" id="statement-error" role="alert"></div>'+
     '<div><button type="button" class="primary" data-action="statement-apply"'+(summary?'':' disabled')+'>재고에 반영 ('+summary+'건)</button></div></div></section>'+
     '<section class="panel">'+panelHead("재고 반영 내역 · "+history.length+"건")+
-    officeTable(["매입일","매입처","품목","연결 상품","!반영 수량","!공급가액"],history.map(row=>[
-      esc(row.date),esc(row.supplier),esc(row.name),esc(names.get(row.sku)||row.sku),
+    officeTable(["매입일","매입처","품목","반영 대상","!반영 수량","!공급가액"],history.map(row=>[
+      esc(row.date),esc(row.supplier),esc(row.name),esc(row.sku?(names.get(row.sku)||row.sku):"벌크 원물 "+(row.totalWeightKg!=null?fmt.format(row.totalWeightKg)+"kg":"")),
       fmt.format(row.qty)+" "+esc(row.unit),won(purchaseSupply(row))]))+'</section>';
 }
 function statementApplyRows(draft){
-  const picked=draft.rows.filter(row=>row.use&&row.sku);
+  const picked=draft.rows.filter(row=>row.use&&row.target);
   if(!picked.length)throw Error("재고에 반영할 품목을 선택해 주세요.");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.date))throw Error("매입일을 입력해 주세요.");
   if(!draft.supplier.trim())throw Error("매입처를 입력해 주세요.");
   const skuTotals=new Map();
   const records=picked.map(row=>{
-    const qty=Number(row.qty),price=Number(row.price),vat=row.vat===""||row.vat==null?0:Number(row.vat);
-    if(!row.name.trim())throw Error("품목명을 입력해 주세요.");
-    if(!Number.isFinite(qty)||qty<=0)throw Error(row.name+": 수량을 확인해 주세요.");
-    if(!Number.isInteger(qty))throw Error(row.name+": 재고는 정수 수량으로 반영됩니다. 수량을 정수로 고쳐 주세요.");
-    if(!Number.isSafeInteger(price)||price<0||!Number.isSafeInteger(vat)||vat<0)throw Error(row.name+": 단가와 부가세는 0 이상의 정수로 입력해 주세요.");
-    skuTotals.set(row.sku,(skuTotals.get(row.sku)||0)+qty);
-    return {id:crypto.randomUUID(),date:draft.date,supplier:draft.supplier.trim(),name:row.name.trim(),memo:"거래명세서 재고 반영",
-      type:"special",unit:row.unit,qty,price,vat,paymentStatus:"unpaid",sku:row.sku};
+    const name=row.name.trim(),qty=Number(row.qty),price=Number(row.price),vat=row.vat===""||row.vat==null?0:Number(row.vat);
+    if(!name)throw Error("품목명을 입력해 주세요.");
+    if(!Number.isFinite(qty)||qty<=0)throw Error(name+": 수량을 확인해 주세요.");
+    if(!Number.isSafeInteger(price)||price<0||!Number.isSafeInteger(vat)||vat<0)throw Error(name+": 단가와 부가세는 0 이상의 정수로 입력해 주세요.");
+    const base={id:crypto.randomUUID(),date:draft.date,supplier:draft.supplier.trim(),name,memo:"거래명세서 재고 반영",statement:true,price,vat,paymentStatus:"unpaid"};
+    if(row.target==="m"){
+      const specKg=Number(row.specKg);
+      if(!Number.isInteger(qty))throw Error(name+": 박스 수는 정수여야 합니다.");
+      if(!(specKg>0))throw Error(name+": 박스당 kg을 입력해 주세요.");
+      const totalWeightKg=Math.round(specKg*qty*1000)/1000;
+      if(totalWeightKg<0.001||totalWeightKg>1000000)throw Error(name+": 총 중량을 확인해 주세요.");
+      return {...base,type:"bulk",unit:"박스",qty,totalWeightKg,packsPerBox:1};
+    }
+    const sku=row.target.slice(2);
+    if(!Number.isInteger(qty))throw Error(name+": 상품 재고는 정수 수량으로 반영됩니다. 수량을 정수로 고쳐 주세요.");
+    skuTotals.set(sku,(skuTotals.get(sku)||0)+qty);
+    return {...base,type:"special",unit:row.unit,qty,sku};
   });
   return {records,skuTotals};
 }
@@ -778,11 +790,20 @@ function fillStatement(text,statusText){
   const parsed=parseStatement(text);
   if(parsed.date)draft.date=parsed.date;
   if(parsed.supplier)draft.supplier=parsed.supplier;
-  draft.rows=parsed.items.map(item=>({name:item.name,qty:item.qty,unit:item.unit,price:item.price,vat:item.vat??"",
-    sku:matchStatementProduct(item.name,store.products||[]),use:true}));
-  draft.rows.forEach(row=>{if(!row.sku)row.use=false;});
-  const unmatched=draft.rows.filter(r=>!r.sku).length;
-  draft.status=statusText+" · "+(parsed.items.length?parsed.items.length+"개 품목을 찾았습니다."+(unmatched?" 상품을 연결하지 못한 "+unmatched+"개는 직접 선택해 주세요.":" 값이 맞는지 확인해 주세요."):"품목 줄을 찾지 못했습니다. 아래에 문서에서 읽은 내용을 표시했습니다. 이 내용을 알려주시면 양식에 맞게 인식 규칙을 추가할 수 있습니다.");
+  const materials=activeBulkMaterials().map(item=>({sku:item.name,name:item.name}));
+  draft.rows=parsed.items.map(item=>{
+    const sku=matchStatementProduct(item.name,store.products||[]);
+    const material=item.specKg?matchStatementProduct(item.name,materials):"";
+    const target=sku?"p:"+sku:item.specKg?"m":"";
+    // 같은 이름의 원물이 이미 있으면 그 이름으로 맞춰 재고가 합산되게 합니다.
+    const name=!sku&&material?material:item.name;
+    const price=Math.round(item.supply/item.qty);
+    // 합계가 명세서와 정확히 맞도록 부가세는 합계에서 공급가액을 뺀 값으로 둡니다.
+    return {name,qty:item.qty,unit:item.unit,specKg:item.specKg??"",price,vat:item.total-Math.round(price*item.qty),target,use:Boolean(target)};
+  });
+  const unmatched=draft.rows.filter(r=>!r.target).length;
+  const check=parsed.totalMatches===false?" 명세서 합계 "+won(parsed.totals.total)+"와 품목 합계 "+won(parsed.items.reduce((t,i)=>t+i.total,0))+"가 다릅니다. 빠진 품목이 없는지 확인해 주세요.":parsed.totalMatches?" 명세서 합계와 일치합니다.":"";
+  draft.status=statusText+" · "+(parsed.items.length?parsed.items.length+"개 품목을 찾았습니다."+(unmatched?" 반영 대상을 정하지 못한 "+unmatched+"개는 직접 선택해 주세요.":"")+check:"품목 줄을 찾지 못했습니다. 아래에 문서에서 읽은 내용을 표시했습니다. 이 내용을 알려주시면 양식에 맞게 인식 규칙을 추가할 수 있습니다.");
   render();
 }
 async function readStatementFile(file){
@@ -2522,9 +2543,9 @@ function updateStatementDraft(event){
     const row=draft.rows[Number(target.dataset.statementRow)],field=target.dataset.statementField;
     if(!row)return;
     row[field]=field==="use"?target.checked:target.value;
-    if(field==="sku"&&event.type==="change"){row.use=Boolean(row.sku);render();return;}
-    if(field==="use"||field==="sku"){const button=$("content").querySelector('[data-action="statement-apply"]');
-      const n=draft.rows.filter(r=>r.use&&r.sku).length;button.disabled=!n;button.textContent="재고에 반영 ("+n+"건)";}
+    if(field==="target"&&event.type==="change"){row.use=Boolean(row.target);render();return;}
+    if(field==="use"||field==="target"){const button=$("content").querySelector('[data-action="statement-apply"]');
+      const n=draft.rows.filter(r=>r.use&&r.target).length;button.disabled=!n;button.textContent="재고에 반영 ("+n+"건)";}
   }
 }
 $("content").addEventListener("input",updateStatementDraft);
