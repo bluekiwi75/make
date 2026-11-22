@@ -38,7 +38,7 @@ function validData(data) {
   if(!Array.isArray(records)||records.length>5000||!records.every(row=>row&&
     ["carriers","suppliers","matches","support","recipes"].includes(row.type)&&
     string(row.id,true)&&string(row.name,true)&&
-    (row.type==="recipes"?recipeText(row.detail)&&recipeText(row.note)&&validRecipeMaterials(row):string(row.detail)&&string(row.note))
+    (row.type==="recipes"?recipeText(row.detail)&&(row.note===undefined||(typeof row.note==="string"&&row.note.length<=2000))&&validRecipeMaterials(row)&&["autoPack","manualPack"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=200))&&["autoNeeds","manualNeeds"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=2000)):string(row.detail)&&string(row.note))
   )||!unique(records,row=>row.id))return false;
   if(!Array.isArray(rules)||rules.length>50||!rules.every(rule=>rule&&
     ["name","deliveryMemo"].includes(rule.field)&&string(rule.find,true)&&string(rule.replacement)))return false;

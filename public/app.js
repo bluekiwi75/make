@@ -2008,6 +2008,7 @@ document.addEventListener("click",async event=>{
     if(action==="show-product-costs")$("product-costs").focus();
     if(action==="cost-import")$("cost-file").click();
     if(action==="recipe-import")$("recipe-file").click();
+    if(action==="recipe-export")exportRecipes();
     if(action==="bulk-material-edit"||action==="bulk-material-delete")editBulkMaterial(item.dataset.name,action==="bulk-material-delete");
     if(action==="bulk-material-fill-date")await fillBulkPriceDates();
     if(action==="bulk-material-xlsx")download("벌크원물_"+day()+".xlsx",[bulkMaterialColumns,...activeBulkMaterials().map(bulkMaterialValues)]);
@@ -2284,7 +2285,73 @@ function officeRecordsView(type) {
     (type==="matches"?btn("미매칭 주문에 규칙 적용","office-apply-matches"):"")+(recipe?btn("엑셀 가져오기","recipe-import"):"");
   return officeHeading(title,actions)+officePanel(title,officeTable([...labels,"작업"],rows));
 }
+// 제품 레시피: 엑셀(제품 레시피 화면의 엑셀 다운로드)과 같은 항목으로 등록·표시·내보내기를 합니다.
+const recipeColumns=["제품명","재료·배합","원물 차감 기준 단위","원물 차감 기준 (g)","자동 기준 포장 규격","자동 기준 1턴 원물 필요량 (g)","수동 기준 포장 규격","수동 기준 1턴 원물 필요량 (g)"];
+const recipeMaterialText=materials=>(materials||[]).map(item=>item.name+" "+item.grams+" g").join("\n");
+function recipeBlendText(materials){
+  const total=materials.reduce((sum,item)=>sum+item.grams,0);
+  return materials.map(item=>item.name+" "+item.grams+"g ("+Number((item.grams/total*100).toFixed(1))+"%)").join("\n");
+}
+// "찹쌀땅콩 100 g" 또는 "찹쌀땅콩 | 100" 형식의 줄을 원물 목록으로 바꿉니다. 형식이 틀린 줄이 있으면 그 줄을 돌려줍니다.
+function parseMaterialLines(text){
+  const materials=[],seen=new Set();
+  for(const line of String(text??"").split(/\r?\n/).map(item=>item.trim()).filter(Boolean)){
+    const match=line.match(/^(.+?)\s*\|\s*(\d+(?:\.\d+)?)$/)||line.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*g$/i);
+    const grams=match?Math.round(Number(match[2])*1000)/1000:NaN;
+    const name=match?rawStockKey(match[1]):"";
+    if(!name||name.length>120||!(grams>0)||grams>1000000||seen.has(name))return {materials,bad:line};
+    seen.add(name);materials.push({name,grams});
+  }
+  return {materials,bad:null};
+}
+function editRecipe(id){
+  const row=officeRows("recipes").find(item=>item.id===id);
+  const area=(label,name,value,rows=4,help="")=>'<label class="wide">'+label+
+    '<textarea name="'+name+'" rows="'+rows+'" maxlength="2000">'+esc(value||"")+'</textarea>'+(help?'<small class="muted">'+help+'</small>':"")+'</label>';
+  const [nameLabel,blendLabel,unitLabel,gramLabel,autoPackLabel,autoNeedLabel,manualPackLabel,manualNeedLabel]=recipeColumns;
+  formDialog(row?"레시피 수정":"레시피 등록",
+    '<label class="wide">'+nameLabel+'<input name="name" maxlength="120" value="'+esc(row?.name||"")+'" required></label>'+
+    area(blendLabel,"detail",row?.detail,5,"한 줄에 한 원물, 예: 찹쌀땅콩 100g (20%). 비워 두면 아래 원물 차감 기준에서 자동으로 만듭니다.")+
+    select(unitLabel,"recipeUnit",productionUnits,row?.unit||"봉")+
+    area(gramLabel,"recipeMaterials",recipeMaterialText(row?.materials),5,"한 줄에 한 원물, 예: 찹쌀땅콩 100 g. 사입 품목명과 같아야 생산 시 원물 재고에서 차감됩니다.")+
+    '<label class="wide">'+autoPackLabel+'<input name="autoPack" maxlength="200" value="'+esc(row?.autoPack||"")+'"></label>'+
+    area(autoNeedLabel,"autoNeeds",row?.autoNeeds,4)+
+    '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>'+
+    area(manualNeedLabel,"manualNeeds",row?.manualNeeds,4),
+    async values=>{
+      const name=values.name.trim();
+      if(!name)throw Error("제품명을 입력해 주세요.");
+      const parsed=parseMaterialLines(values.recipeMaterials);
+      if(parsed.bad)throw Error("원물 차감 기준은 ‘원물명 100 g’ 형식으로 한 줄에 하나씩, 중복 없이 입력해 주세요: "+parsed.bad);
+      if(parsed.materials.length>20)throw Error("원물은 최대 20가지까지 입력할 수 있습니다.");
+      let detail=values.detail.trim();
+      if(!detail&&parsed.materials.length)detail=recipeBlendText(parsed.materials);
+      if(!detail)throw Error("재료·배합 또는 원물 차감 기준 (g)을 입력해 주세요.");
+      if(officeRows("recipes").some(item=>item.id!==id&&item.name===name))throw Error("이미 등록되어 있습니다.");
+      const record={id:row?.id||crypto.randomUUID(),type:"recipes",name,detail,note:row?.note||""};
+      if(parsed.materials.length){record.unit=values.recipeUnit;record.materials=parsed.materials;}
+      for(const key of ["autoPack","autoNeeds","manualPack","manualNeeds"]){const value=values[key].trim();if(value)record[key]=value;}
+      await commit({...store,officeRecords:[...(store.officeRecords||[]).filter(item=>item.id!==id),record]});
+    });
+}
+function exportRecipes(){
+  const rows=officeRows("recipes");
+  if(!rows.length)return notify("내려받을 레시피가 없습니다.");
+  download("제품레시피_"+day()+".xlsx",[recipeColumns,...rows.map(row=>[row.name,row.detail,row.unit||"",recipeMaterialText(row.materials),row.autoPack||"",row.autoNeeds||"",row.manualPack||"",row.manualNeeds||""])]);
+}
+function recipesView(){
+  const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
+  const rows=officeRows("recipes").map(row=>[
+    esc(row.name),cell(row.detail),esc(row.unit||""),cell(recipeMaterialText(row.materials)),esc(row.autoPack||""),cell(row.autoNeeds),esc(row.manualPack||""),cell(row.manualNeeds),
+    '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
+    '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
+  return officeHeading(officeLabels.recipes||"제품 레시피",
+      '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
+    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns,"작업"],rows));
+}
+
 function editOfficeRecord(type,id) {
+  if(type==="recipes")return editRecipe(id);
   const row=officeRows(type).find(item=>item.id===id);
   const [nameLabel,detailLabel,noteLabel]=officeRecordFields[type];
   const recipe=type==="recipes";
@@ -2463,6 +2530,15 @@ async function importRecipeWorkbook(file){
   const header=(rows[0]||[]).map(value=>String(value).trim());
   const need=["제품명","재료·배합","원물 차감 기준 단위","원물 차감 기준 (g)"];
   const [nameCol,blendCol,unitCol,gramCol]=need.map(label=>header.indexOf(label));
+  const [autoPackCol,autoNeedCol,manualPackCol,manualNeedCol]=recipeColumns.slice(4).map(label=>header.indexOf(label));
+  const extra=row=>{
+    const out={};
+    for(const [key,col,max] of [["autoPack",autoPackCol,200],["autoNeeds",autoNeedCol,2000],["manualPack",manualPackCol,200],["manualNeeds",manualNeedCol,2000]]){
+      const value=col<0?"":String(row[col]??"").trim();
+      if(value&&value.length<=max)out[key]=value;
+    }
+    return out;
+  };
   if([nameCol,blendCol,unitCol,gramCol].some(index=>index<0))throw Error("제품 레시피 엑셀 형식이 아닙니다. 첫 줄에 "+need.join(", ")+" 열이 필요합니다.");
   if(switching||store!==source||business!==target)throw Error("사업자 자료가 바뀌었습니다. 파일을 다시 선택해 주세요.");
   const parsed=[],problems=[];
@@ -2483,7 +2559,7 @@ async function importRecipeWorkbook(file){
     if(!productionUnits.includes(unit))problems.push(line+"행 "+name+": 단위는 봉, kg, 개, 박스 중 하나여야 합니다.");
     else if(!materials.length)problems.push(line+"행 "+name+": 원물 차감 기준 (g)이 비어 있습니다.");
     else if(!detail||detail.length>2000)problems.push(line+"행 "+name+": 재료·배합을 확인해 주세요.");
-    else parsed.push({name,unit,detail,materials});
+    else parsed.push({name,unit,detail,materials,...extra(row)});
   }
   if(problems.length)throw Error(problems.slice(0,3).join(" / ")+(problems.length>3?" 외 "+(problems.length-3)+"건":""));
   if(!parsed.length)throw Error("가져올 제품 레시피가 없습니다.");
@@ -2500,10 +2576,12 @@ async function importRecipeWorkbook(file){
       updated++;
       const before=new Set((old.materials||[]).map(material=>material.name));
       renamed+=item.materials.filter(material=>!before.has(material.name)).length;
-      byId.set(old.id,{...old,name:old.name,unit:item.unit,detail:item.detail,note:old.note&&old.note.trim()?old.note:note,materials:item.materials});
+      byId.set(old.id,{...old,name:old.name,unit:item.unit,detail:item.detail,note:old.note&&old.note.trim()?old.note:note,materials:item.materials,
+        ...Object.fromEntries(["autoPack","autoNeeds","manualPack","manualNeeds"].filter(key=>item[key]).map(key=>[key,item[key]]))});
     }else{
       added++;
-      appended.push({id:crypto.randomUUID(),type:"recipes",name:item.name,unit:item.unit,detail:item.detail,note,materials:item.materials});
+      appended.push({id:crypto.randomUUID(),type:"recipes",name:item.name,unit:item.unit,detail:item.detail,note,materials:item.materials,
+        ...Object.fromEntries(["autoPack","autoNeeds","manualPack","manualNeeds"].filter(key=>item[key]).map(key=>[key,item[key]]))});
     }
   }
   const next=[...records.map(row=>byId.get(row.id)||row),...appended];
@@ -2673,7 +2751,7 @@ const officeViews = {
       officeLink("suppliers","사입처 관리")+officeLink("purchases","사입 목록")+'</div>'),
 
   ...Object.fromEntries(Object.keys(officeOrderViews).map(id=>[id,()=>officeOrderView(id)])),
-  ...Object.fromEntries(Object.keys(officeRecordFields).map(id=>[id,()=>officeRecordsView(id)])),
+  ...Object.fromEntries(Object.keys(officeRecordFields).map(id=>[id,()=>id==="recipes"?recipesView():officeRecordsView(id)])),
   ...Object.fromEntries(Object.keys(officeReports).map(id=>[id,()=>officeReportView(id)])),
   printFolder:()=>head("폴더 설정","인쇄파일과 상품집계표를 저장할 폴더를 사업자별로 지정합니다.",officeLink("export","인쇄파일 내보내기"))+
     '<div id="print-folder" class="panel" aria-live="polite"></div>',
