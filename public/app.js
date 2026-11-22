@@ -2007,6 +2007,7 @@ document.addEventListener("click",async event=>{
     if(action==="product-import")$("product-file").click();
     if(action==="show-product-costs")$("product-costs").focus();
     if(action==="cost-import")$("cost-file").click();
+    if(action==="recipe-import")$("recipe-file").click();
     if(action==="bulk-material-edit"||action==="bulk-material-delete")editBulkMaterial(item.dataset.name,action==="bulk-material-delete");
     if(action==="bulk-material-fill-date")await fillBulkPriceDates();
     if(action==="bulk-material-xlsx")download("벌크원물_"+day()+".xlsx",[bulkMaterialColumns,...activeBulkMaterials().map(bulkMaterialValues)]);
@@ -2112,6 +2113,10 @@ $("business").addEventListener("change",event=>{void changeBusiness(event.target
 $("invoices").addEventListener("change",async event=>{
   const file=event.target.files[0];event.target.value="";
   if(file)try{await importInvoices(file);}catch(error){notify(error.message);}
+});
+$("recipe-file").addEventListener("change",async event=>{
+  const file=event.target.files[0];event.target.value="";
+  if(file)try{await importRecipeWorkbook(file);}catch(error){notify(error.message);}
 });
 $("cost-file").addEventListener("change",async event=>{
   const file=event.target.files[0];event.target.value="";
@@ -2276,7 +2281,7 @@ function officeRecordsView(type) {
     '<button class="short danger" data-action="office-remove" data-type="'+type+'" data-id="'+esc(row.id)+'">삭제</button>'
   ]);
   const actions='<button type="button" class="primary" data-action="office-edit" data-type="'+type+'">'+(recipe?"레시피 등록":"등록")+'</button>'+
-    (type==="matches"?btn("미매칭 주문에 규칙 적용","office-apply-matches"):"");
+    (type==="matches"?btn("미매칭 주문에 규칙 적용","office-apply-matches"):"")+(recipe?btn("엑셀 가져오기","recipe-import"):"");
   return officeHeading(title,actions)+officePanel(title,officeTable([...labels,"작업"],rows));
 }
 function editOfficeRecord(type,id) {
@@ -2450,6 +2455,69 @@ function planCostImport(source,sheet){
   return {data:{...source,costSheet:sheet,products:nextProducts,officeRecords:[...records,...nextRecipes]},
     updated,added,recipes:nextRecipes.length};
 }
+// 제품 레시피 화면에서 내려받은 엑셀(제품명, 재료·배합, 원물 차감 기준 단위, 원물 차감 기준 (g))을 가져와 레시피를 등록·갱신합니다.
+async function importRecipeWorkbook(file){
+  if(!/\.xlsx$/i.test(file.name)||file.size>8000000)throw Error("8MB 이하의 제품 레시피(.xlsx)를 선택해 주세요.");
+  const source=store,target=business;
+  const rows=await readWorkbook(await file.arrayBuffer());
+  const header=(rows[0]||[]).map(value=>String(value).trim());
+  const need=["제품명","재료·배합","원물 차감 기준 단위","원물 차감 기준 (g)"];
+  const [nameCol,blendCol,unitCol,gramCol]=need.map(label=>header.indexOf(label));
+  if([nameCol,blendCol,unitCol,gramCol].some(index=>index<0))throw Error("제품 레시피 엑셀 형식이 아닙니다. 첫 줄에 "+need.join(", ")+" 열이 필요합니다.");
+  if(switching||store!==source||business!==target)throw Error("사업자 자료가 바뀌었습니다. 파일을 다시 선택해 주세요.");
+  const parsed=[],problems=[];
+  for(const row of rows.slice(1)){
+    const name=String(row[nameCol]??"").trim();
+    if(!name)continue;
+    const line=row.sheetRow||"?";
+    const unit=String(row[unitCol]??"").trim();
+    const materials=[],seen=new Set();
+    for(const text of String(row[gramCol]??"").split(/\r?\n/).map(item=>item.trim()).filter(Boolean)){
+      const match=text.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*g$/i);
+      const grams=match?Math.round(Number(match[2])*1000)/1000:NaN;
+      const material=match?rawStockKey(match[1]):"";
+      if(!material||!(grams>0)||grams>1000000||seen.has(material)){problems.push(line+"행 "+name+": ‘"+text+"’ 형식 확인");break;}
+      seen.add(material);materials.push({name:material,grams});
+    }
+    const detail=String(row[blendCol]??"").trim();
+    if(!productionUnits.includes(unit))problems.push(line+"행 "+name+": 단위는 봉, kg, 개, 박스 중 하나여야 합니다.");
+    else if(!materials.length)problems.push(line+"행 "+name+": 원물 차감 기준 (g)이 비어 있습니다.");
+    else if(!detail||detail.length>2000)problems.push(line+"행 "+name+": 재료·배합을 확인해 주세요.");
+    else parsed.push({name,unit,detail,materials});
+  }
+  if(problems.length)throw Error(problems.slice(0,3).join(" / ")+(problems.length>3?" 외 "+(problems.length-3)+"건":""));
+  if(!parsed.length)throw Error("가져올 제품 레시피가 없습니다.");
+  if(new Set(parsed.map(item=>costName(item.name))).size!==parsed.length)throw Error("같은 제품명이 두 번 이상 있습니다.");
+  const records=source.officeRecords||[];
+  const existing=new Map(records.filter(row=>row.type==="recipes").map(row=>[costName(row.name),row]));
+  const note="제품 레시피 엑셀 · "+file.name;
+  let added=0,updated=0,renamed=0;
+  const byId=new Map();
+  const appended=[];
+  for(const item of parsed){
+    const old=existing.get(costName(item.name));
+    if(old){
+      updated++;
+      const before=new Set((old.materials||[]).map(material=>material.name));
+      renamed+=item.materials.filter(material=>!before.has(material.name)).length;
+      byId.set(old.id,{...old,name:old.name,unit:item.unit,detail:item.detail,note:old.note&&old.note.trim()?old.note:note,materials:item.materials});
+    }else{
+      added++;
+      appended.push({id:crypto.randomUUID(),type:"recipes",name:item.name,unit:item.unit,detail:item.detail,note,materials:item.materials});
+    }
+  }
+  const next=[...records.map(row=>byId.get(row.id)||row),...appended];
+  if(next.filter(row=>row.type==="recipes").length>1000)throw Error("레시피가 너무 많습니다.");
+  formDialog("제품 레시피 엑셀 적용",'<p class="wide">'+parsed.length+'개 제품 레시피 · 신규 '+added+'개 등록, 기존 '+updated+'개 갱신</p>'+
+    (renamed?'<p class="wide muted">갱신하는 레시피에서 원물 이름이 달라지는 항목 '+renamed+'개 (예: 원가시트의 이름 → 엑셀의 이름)</p>':"")+
+    '<p class="wide muted">'+esc(parsed.map(item=>item.name).join(", "))+'</p>'+
+    '<p class="wide muted">이미 등록된 생산 기록과 원물 재고는 바뀌지 않습니다. 이후 생산 등록부터 새 원물 차감 기준이 적용됩니다.</p>',
+    async ()=>{
+      if(store!==source||business!==target)throw Error("사업자 자료가 바뀌었습니다. 파일을 다시 선택해 주세요.");
+      await commit({...store,officeRecords:next});
+    },"현재 사업자에 적용","제품 레시피를 적용했습니다.");
+}
+
 async function importCostWorkbook(file){
   if(!/\.xlsx$/i.test(file.name)||file.size>8000000)throw Error("8MB 이하의 원가시트(.xlsx)를 선택해 주세요.");
   const source=store,target=business;

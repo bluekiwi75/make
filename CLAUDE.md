@@ -27,6 +27,10 @@
 - 지원 양식: `순번 품명 규격 단위 수량 단가 금액 세액 합계`(단가는 부가세 포함), 공급자용·공급받는자용 두 부가 있으면 첫 부만 읽습니다. 명세서 합계와 품목 합계가 다르면 경고를 표시합니다.
 - 다른 양식은 `public/statement.js`의 `statementLine`에 규칙을 추가하고 실제 PDF로 확인하세요(`pdftotext -layout`으로 글자 배치를 볼 수 있습니다).
 
+## 제품 레시피 엑셀 가져오기
+- 메뉴: 제품 레시피 → `엑셀 가져오기`. 형식은 이 화면의 `엑셀 다운로드` 결과와 같고, 첫 줄에 `제품명`, `재료·배합`, `원물 차감 기준 단위`, `원물 차감 기준 (g)` 열이 필요합니다.
+- 같은 제품명은 갱신(원물·g·단위·배합 문구), 없는 제품명은 신규 등록합니다. 원가시트(`costSheet`)의 레시피는 건드리지 않습니다. 함수는 `importRecipeWorkbook`입니다.
+
 ## Claude 아티팩트 (휴대폰에서 화면 보기)
 - 주소: https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV (비공개, 소유자만 열람)
 - 만들기: `node tools/build-artifact.mjs` → `dist/artifact/marketdesk.html`. 샘플 모드로 고정하고, PDF는 cdnjs의 pdf.js로 페이지 안에서 읽습니다(스캔본 글자 인식 불가).
