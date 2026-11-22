@@ -32,11 +32,13 @@
 - 메뉴: 제품 레시피 → `엑셀 가져오기`. 형식은 이 화면의 `엑셀 다운로드` 결과와 같고, 첫 줄에 `제품명`, `재료·배합`, `원물 차감 기준 단위`, `원물 차감 기준 (g)` 열이 필요합니다.
 - 같은 제품명은 갱신(원물·g·단위·배합 문구), 없는 제품명은 신규 등록합니다. 원가시트(`costSheet`)의 레시피는 건드리지 않습니다. 함수는 `importRecipeWorkbook`입니다.
 
-## Claude 아티팩트 (휴대폰에서 화면 보기)
-- 주소: https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV (비공개, 소유자만 열람)
-- 만들기: `node tools/build-artifact.mjs` → `dist/artifact/marketdesk.html`. 샘플 모드로 고정하고, PDF는 cdnjs의 pdf.js로 페이지 안에서 읽습니다(스캔본 글자 인식 불가).
-- 갱신: Artifact 도구로 이 파일을 위 `url`에 다시 게시합니다. 새 URL이 생기지 않게 `url`을 꼭 지정하세요.
-- 아티팩트에서는 파일 다운로드, 서버 저장, 외부 API가 동작하지 않습니다.
+## Claude 아티팩트 = 운영 사이트 (휴대폰에서 사용)
+- 주소: https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV (비공개, 소유자만 열람). 데이터는 아티팩트 `db`의 `state` 컬렉션에 저장됩니다(규칙: 읽기·쓰기 admin 이상). **`state` 문서를 지우거나 덮어쓰지 마세요.**
+- 저장 구조: 페이지 안에서 `worker.mjs`가 그대로 돌며 검증하고(`tools/artifact-persist.js`가 `/api/state`를 가로챔), D1 표(market_state)를 `state/b1`(메타: revision, chunks)과 `state/b1-0…`(내용 조각, 한 조각 50,000자)로 저장합니다. 사업자 2는 `b2`입니다. 문서 하나는 256KiB 이하여야 해서 조각으로 나눕니다.
+- 만들기: `node tools/build-artifact.mjs` → `dist/artifact/marketdesk.html`(저장 모드). `--demo`를 붙이면 샘플 데이터로 고정한 체험용(저장 안 됨)이 됩니다.
+- 갱신: Artifact 도구로 이 파일을 위 `url`에 다시 게시하고, `capabilities`는 `{"db":{"rules":[{"path":"state","read":"admin","write":"admin"}]}}`를 그대로 넘깁니다. 코드를 다시 게시해도 저장된 데이터는 유지됩니다.
+- 데이터를 직접 넣거나 확인할 때는 `ArtifactData`로 `state` 컬렉션을 읽습니다. 처음 데이터는 `tools/qa/fake-server.mjs`(`/__empty`)에서 원가시트·제품 레시피를 가져와 만든 내용을 위 형식으로 넣었습니다.
+- 이 사이트에서 쓸 수 없는 것: 판매처 API 연동(`/api/markets`), 사입 원본 파일 보관(`/api/purchase-document`), 파일 다운로드. 거래명세서 PDF 읽기는 페이지 안 pdf.js로 되고 스캔본 글자 인식은 안 됩니다.
 
 ## 확인 방법
 - `node run-local.mjs` 후 `http://127.0.0.1:8787/#화면이름`. Playwright가 설치되어 있어 `require('playwright')`로 캡처할 수 있습니다.

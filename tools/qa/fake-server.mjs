@@ -27,6 +27,7 @@ createServer(async (inc, out) => {
   try {
     const chunks=[]; for await (const c of inc) chunks.push(c);
     const url = new URL(inc.url, "http://"+inc.headers.host);
+    if (url.pathname==="/__empty") { rows.delete("test-user"); out.writeHead(200).end("ok"); return; }
     if (url.pathname==="/__reset") { reset(); out.writeHead(200).end("ok"); return; }
     if (url.pathname==="/__db") { out.writeHead(200,{"content-type":"application/json"}).end(rows.get("test-user").payload); return; }
     const headers = new Headers(); for (const [k,v] of Object.entries(inc.headers)) headers.set(k,String(v));

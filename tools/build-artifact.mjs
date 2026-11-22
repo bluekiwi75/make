@@ -1,11 +1,30 @@
-// 샘플 모드로 고정한 단일 HTML(Claude 아티팩트용)을 만듭니다: node tools/build-artifact.mjs [출력경로]
+// Claude 아티팩트용 단일 HTML을 만듭니다: node tools/build-artifact.mjs [--demo] [출력경로]
+//  기본: 저장 모드. 페이지 안의 Worker가 데이터를 검증하고 아티팩트 db에 저장합니다(tools/artifact-persist.js).
+//  --demo: 샘플 데이터로 고정한 체험 모드(저장 안 됨).
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+const demoMode = process.argv.includes("--demo");
+const outArg = process.argv.slice(2).find(arg => !arg.startsWith("--"));
 const p = f => readFileSync(new URL("../public/" + f, import.meta.url), "utf8");
 let html = p("index.html");
 const body = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
-let app = p("app.js").replace('if(location.hostname==="127.0.0.1"||location.hostname==="localhost"){demo=true;', '{demo=true;');
-if (!app.includes("{demo=true;")) throw Error("patch failed");
+let app = p("app.js");
+if (demoMode) {
+  app = app.replace('if(location.hostname==="127.0.0.1"||location.hostname==="localhost"){demo=true;', '{demo=true;');
+  if (!app.includes("{demo=true;")) throw Error("patch failed");
+}
+let persistScripts = "";
+if (!demoMode) {
+  const built = spawnSync(process.execPath, [fileURLToPath(new URL("../build.mjs", import.meta.url))], { stdio: "inherit" });
+  if (built.status !== 0) throw Error("build.mjs failed");
+  let worker = readFileSync(new URL("../dist/server/index.js", import.meta.url), "utf8")
+    .replace(/^const assets = .*\n/, "const assets = {};\n")
+    .replace("export default {", "globalThis.__marketWorker = {");
+  if (worker.includes("export default") || !worker.includes("globalThis.__marketWorker")) throw Error("worker transform failed");
+  persistScripts = "<script>" + readFileSync(new URL("./artifact-persist.js", import.meta.url), "utf8").replace(/<\/script/gi, "<\\/script") + "</script>\n" +
+    "<script>(()=>{\n" + worker.replace(/<\/script/gi, "<\\/script") + "\n})();</script>\n";
+}
 
 const scan = p("purchase-scan.js");
 const pageTextSrc = scan.slice(scan.indexOf("function pageText("), scan.indexOf("async function readDocument("));
@@ -41,11 +60,11 @@ const out = `<title>마켓데스크</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>body{background:#f4f6f2;color:#1d3029}${css}</style>
 ${body.replace(/<script[^>]*><\/script>/g, "")}
-<script>${esc(p("raw-stock.js"))}</script>
+${persistScripts}<script>${esc(p("raw-stock.js"))}</script>
 <script>${esc(p("statement.js"))}</script>
 <script type="module">${esc(app)}</script>
 `;
-const target = new URL(process.argv[2] || "../dist/artifact/marketdesk.html", import.meta.url);
+const target = new URL(outArg || "../dist/artifact/marketdesk.html", import.meta.url);
 mkdirSync(new URL(".", target), { recursive: true });
 writeFileSync(target, out);
 console.log(fileURLToPath(target), out.length);
