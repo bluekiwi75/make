@@ -144,3 +144,8 @@
 .shape-pick input:checked+span{border-color:var(--green);background:#eaf3dd}
 .swatch input:focus-visible+span,.shape-pick input:focus-visible+span{outline:2px solid #418e65;outline-offset:2px}
 .swatch.used,.shape-pick.used{opacity:.35;cursor:not-allowed}
+.jump-bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.jump-bar button{min-height:38px}
+.panel[id^="cost-"]{scroll-margin-top:12px}
+#cost-recipes td:nth-child(3){white-space:normal;min-width:260px;line-height:1.5}
+#cost-recipes td:nth-child(4),#cost-recipes th:nth-child(4){white-space:nowrap}
