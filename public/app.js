@@ -2143,11 +2143,6 @@ $("file").addEventListener("change",async event=>{
   if(file)try{await importOrders(file);}catch(error){notify(error.message);}
 });
 $("content").addEventListener("input",event=>{
-  const priceForm=event.target.name==="price"&&event.target.closest(".bulk-price-form[data-tax]");
-  if(priceForm){
-    const value=event.target.valueAsNumber,preview=priceForm.querySelector("[data-vat-preview]");
-    {const split=splitVat(priceForm.dataset.tax,value);preview.textContent=Number.isFinite(value)&&value>=0?"도매가 "+won(split.price)+" + 부가세 "+won(split.vat):"";}
-  }
   if(["estimate-price","estimate-tax"].includes(event.target.name)){
     const row=event.target.closest("tr"),input=row.querySelector('[name="estimate-price"]');
     const taxStatus=row.querySelector('[name="estimate-tax"]').value;
@@ -2184,6 +2179,7 @@ $("content").addEventListener("change",event=>{
     $("product-ranking-chart").innerHTML=productSalesRanking(orders);
     return;
   }
+  if(input.name==="price"&&form?.matches(".bulk-price-form[data-tax]")){if(input.value!==""&&input.validity.valid)form.requestSubmit();return;}
   if(input.name==="material-tax"){void updateMaterialTax(input).catch(error=>{notify(error.message);render();});return;}
   if(input.name==="collect-market")collectionSelections.set(business,new Set(selectedCollectionChannels()));
   if(form?.id!=="stats-form")return;
@@ -2662,8 +2658,8 @@ function costSheetView(){
       const vat=rowVat(row),name=esc(row.name);
       return [name,row.archived?esc(row.tax):'<select name="material-tax" data-material="'+name+'" aria-label="'+name+' 과세 여부">'+options(["과세","면세"],row.tax)+'</select>',
       fmt.format(row.boxKg),price(row.price),price(vat),price(row.price+vat),
-      row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="부가세 포함가" aria-label="'+name+' 새 부가세 포함가 (원/kg)">'+
-        '<button class="short" type="submit">변경</button><small data-vat-preview class="muted"></small></form>',esc(row.priceUpdatedOn??"—")];
+      row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="포함가 입력 후 Enter" aria-label="'+name+' 새 부가세 포함가 (원/kg)">'+
+        '</form>',esc(row.priceUpdatedOn??"—")];
     }))),
     offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료","부가세","생산비"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
