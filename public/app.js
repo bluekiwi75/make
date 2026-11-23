@@ -423,11 +423,11 @@ const orderExpenseFields=[["shipping","택배비"],["pack","포장비"],["fee","
 const standardSellingCosts={shipping:1909,pack:300,supplies:300,feePermille:116};
 function estimateProductProfit(unitCost,price,taxStatus){
   const vat=taxStatus==="면세"?0:taxStatus==="과세"&&price!==null?Math.round(price/10):null;
-  if(price===null||vat===null)return {vat:vat===null?"—":won(vat),total:"—",profit:"—",lowProfit:false};
+  if(price===null||vat===null)return {vat:vat===null?"—":won(vat),total:"—",profit:"—",rate:"—",lowProfit:false};
   const {shipping,pack,supplies,feePermille}=standardSellingCosts;
   const total=unitCost+shipping+pack+supplies+Math.round(price*feePermille/1000)+vat;
   const profit=price-total;
-  return {vat:won(vat),total:won(total),profit:won(profit),lowProfit:profit<=1000};
+  return {vat:won(vat),total:won(total),profit:won(profit),rate:price>0?(profit/price*100).toFixed(1)+"%":"—",lowProfit:profit<=1000};
 }
 function standardTaxBySku(){
   const sheet=store.costSheet;
@@ -450,7 +450,7 @@ function standardCostPanel(){
   const rows=store.products.map(product=>{
     const price=product.estimatedSalePrice??null;
     const taxStatus=product.estimatedTaxStatus===undefined?taxBySku.get(product.sku)??null:product.estimatedTaxStatus;
-    const {vat,total,profit,lowProfit}=estimateProductProfit(product.cost,price,taxStatus);
+    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(product.cost,price,taxStatus);
     const input='<input type="number" min="0" max="1000000000" step="1" inputmode="numeric" name="estimate-price" '+
       'data-sku="'+esc(product.sku)+'" data-unit-cost="'+product.cost+'" value="'+(price??"")+
       '" aria-label="'+esc(product.name+' ('+product.sku+') 판매가')+'">';
@@ -458,11 +458,12 @@ function standardCostPanel(){
       '" aria-label="'+esc(product.name+' ('+product.sku+') 과세 여부')+'">'+options([["","미설정"],"과세","면세"],taxStatus??"")+'</select>';
     return [esc(product.name),esc(product.sku),won(product.cost),won(shipping),won(pack),won(supplies),input,feePermille/10+"%",tax,
       '<span data-estimate-vat>'+vat+'</span>',
-      '<span data-estimate-total>'+total+'</span>','<output data-estimate-profit class="amount-estimate'+(lowProfit?' danger':'')+'">'+profit+'</output>'];
+      '<span data-estimate-total>'+total+'</span>','<output data-estimate-profit class="amount-estimate'+(lowProfit?' danger':'')+'">'+profit+'</output>',
+      '<output data-estimate-rate class="amount-estimate'+(lowProfit?' danger':'')+'">'+rate+'</output>'];
   });
   return '<form id="standard-cost-form">'+officePanel("상품별 기준 원가",
     '<p class="totals">상품 1개를 1건으로 발송하는 예상치입니다. 판매수수료는 판매가의 11.6%, 부가세는 과세 상품에 한해 판매가의 10%를 차감합니다. 과세 여부가 미설정이면 순익 계산에 앞서 선택해 주세요.</p>'+
-    officeTable(["상품명","SKU","등록 단위원가","기준 택배비","기준 포장비","기준 부자재비","판매가 (원)","기준 수수료율","과세 여부","부가세","예상 총비용","예상 순익"],rows),
+    officeTable(["상품명","SKU","등록 단위원가","기준 택배비","기준 포장비","기준 부자재비","판매가 (원)","기준 수수료율","과세 여부","부가세","예상 총비용","예상 순익","수익률"],rows),
     rows.length?'<button type="submit" class="primary">기준값 저장</button>':"")+'</form>';
 }
 async function saveStandardCostInputs(form){
@@ -2141,12 +2142,15 @@ $("content").addEventListener("input",event=>{
     const row=event.target.closest("tr"),input=row.querySelector('[name="estimate-price"]');
     const taxStatus=row.querySelector('[name="estimate-tax"]').value;
     const price=input.value!==""&&input.validity.valid?input.valueAsNumber:null;
-    const {vat,total,profit,lowProfit}=estimateProductProfit(Number(input.dataset.unitCost),price,taxStatus);
+    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(Number(input.dataset.unitCost),price,taxStatus);
     row.querySelector("[data-estimate-vat]").textContent=vat;
     row.querySelector("[data-estimate-total]").textContent=total;
     const profitOutput=row.querySelector("[data-estimate-profit]");
     profitOutput.textContent=profit;
     profitOutput.classList.toggle("danger",lowProfit);
+    const rateOutput=row.querySelector("[data-estimate-rate]");
+    rateOutput.textContent=rate;
+    rateOutput.classList.toggle("danger",lowProfit);
     return;
   }
   const id=event.target.id;
