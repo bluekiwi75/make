@@ -76,6 +76,7 @@ function validCostSheet(sheet){
   if(!sheet||!string(sheet.source,true)||!rows(sheet.materials,300,m=>m&&string(m.name,true)&&
     ["과세","면세"].includes(m.tax)&&number(m.boxKg)&&m.boxKg>0&&number(m.price)&&
     (m.archived===undefined||typeof m.archived==="boolean")&&
+    (m.vat===undefined||(Number.isInteger(m.vat)&&number(m.vat)))&&
     (m.priceUpdatedOn===undefined||(typeof m.priceUpdatedOn==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(m.priceUpdatedOn)&&
       Number.isFinite(Date.parse(m.priceUpdatedOn))&&new Date(m.priceUpdatedOn).toISOString().slice(0,10)===m.priceUpdatedOn)))||
     !unique(sheet.materials,m=>m.name))return false;
