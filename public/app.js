@@ -250,6 +250,7 @@ async function sendRegisteredInvoices(invoices) {
 function canSendInvoice(o) {
   return !demo&&o?.market==="naver"&&o.line&&o.carrier&&o.tracking&&["신규","포장중"].includes(o.status);
 }
+let orderRowLimit=500,orderLimitPage="";
 function orderTable(rows, shipping=false) {
   const view=page();
   const selecting=["export","shippingWork","deduct","restore"].includes(view);
@@ -258,11 +259,14 @@ function orderTable(rows, shipping=false) {
   if(selecting)labels.unshift("선택");
   const hidden=view==="results"&&store.collectionColumns?
     labels.flatMap((label,i)=>collectionColumns.includes(label)&&!store.collectionColumns.includes(label)?[i+1]:[]):[];
+  if(orderLimitPage!==view){orderLimitPage=view;orderRowLimit=500;}
+  // 주문이 많을 때 화면이 느려지지 않게 500건씩 보여 줍니다(선택해서 작업하는 화면은 전체를 보여 줍니다).
+  const shown=selecting?rows:rows.slice(0,orderRowLimit);
   return '<div class="table-wrap"><table class="order-grid">'+(hidden.length?'<colgroup>'+labels.map((_,i)=>'<col'+(hidden.includes(i+1)?' class="hidden-column"':'')+'>').join("")+'</colgroup>':'')+'<thead><tr>'+th(labels)+'</tr></thead><tbody>'+
-  (rows.map(o=>'<tr>'+(selecting?'<td>'+(view==="shippingWork"&&o.market==="naver"?"—":'<input type="checkbox" name="workflow-order" value="'+esc(o.id)+'" aria-label="'+esc(o.number)+' 선택"'+'>')+'</td>':"")+'<td><b>'+esc(o.number)+'</b><span class="sub">'+esc(o.date)+(o.line?' · '+esc(o.line):'')+'</span></td><td>'+esc(o.channel)+(o.market?'<span class="sub">API 수집</span>':'')+'</td><td>'+esc(o.name)+'<span class="sub">'+esc(o.sku||(o.market?(o.marketSku?o.marketSku+" · SKU 미연결":"SKU 미연결"):""))+(costsReady(o)?"":" · 비용 확인 필요")+'</span></td>'+
+  (shown.map(o=>'<tr>'+(selecting?'<td>'+(view==="shippingWork"&&o.market==="naver"?"—":'<input type="checkbox" name="workflow-order" value="'+esc(o.id)+'" aria-label="'+esc(o.number)+' 선택"'+'>')+'</td>':"")+'<td><b>'+esc(o.number)+'</b><span class="sub">'+esc(o.date)+(o.line?' · '+esc(o.line):'')+'</span></td><td>'+esc(o.channel)+(o.market?'<span class="sub">API 수집</span>':'')+'</td><td>'+esc(o.name)+'<span class="sub">'+esc(o.sku||(o.market?(o.marketSku?o.marketSku+" · SKU 미연결":"SKU 미연결"):""))+(costsReady(o)?"":" · 비용 확인 필요")+'</span></td>'+
     (view==="notes"?'<td>'+esc(o.deliveryMemo)+'</td>':"")+
     (shipping?'<td>'+tag(o.status)+'</td><td>'+esc(o.carrier||"미등록")+'<span class="sub">'+esc(o.tracking)+'</span></td>':'<td class="money">'+fmt.format(o.qty)+'</td>'+money(info(o).gross)+'<td>'+tag(o.status)+'</td>')+
-    '<td><button class="short" data-action="order" data-id="'+esc(o.id)+'">'+(shipping?"송장·상태":"상세·수정")+'</button>'+((view==="dispatch"&&canSendInvoice(o))?' <button class="short primary" data-action="send-invoice" data-id="'+esc(o.id)+'">송장 전송</button>':'')+(view==="matching"&&store.products.length?' <button class="short primary" data-action="match-order" data-id="'+esc(o.id)+'">SKU 연결</button>':"")+'</td></tr>').join("")||'<tr><td class="empty" colspan="'+labels.length+'">표시할 주문이 없습니다.</td></tr>')+'</tbody></table></div>';
+    '<td><button class="short" data-action="order" data-id="'+esc(o.id)+'">'+(shipping?"송장·상태":"상세·수정")+'</button>'+((view==="dispatch"&&canSendInvoice(o))?' <button class="short primary" data-action="send-invoice" data-id="'+esc(o.id)+'">송장 전송</button>':'')+(view==="matching"&&store.products.length?' <button class="short primary" data-action="match-order" data-id="'+esc(o.id)+'">SKU 연결</button>':"")+'</td></tr>').join("")+(rows.length>shown.length?'<tr><td class="empty" colspan="'+labels.length+'">'+fmt.format(rows.length)+'건 중 '+fmt.format(shown.length)+'건을 표시했습니다. 기간·판매처·검색으로 좁히거나 '+btn("500건 더 보기","orders-more")+'</td></tr>':"")||'<tr><td class="empty" colspan="'+labels.length+'">표시할 주문이 없습니다.</td></tr>')+'</tbody></table></div>';
 }
 let productRankingMetric="gross";
 function productSalesRanking(orders) {
@@ -1810,7 +1814,7 @@ async function readWorkbook(buffer,sheetName) {
       values[column]=text;
     }
     if(values.some(value=>value!=="")){
-      if(rows.length>=10001)throw Error("엑셀 파일을 10,000행 이하로 나누어 주세요.");
+      if(rows.length>=50001)throw Error("엑셀 파일을 50,000행 이하로 나누어 주세요.");
       const cells=Array.from(values,value=>value??"");
       Object.defineProperty(cells,"sheetRow",{value:Number(row.getAttribute("r"))||rows.length+1});
       rows.push(cells);
@@ -1981,6 +1985,7 @@ document.addEventListener("click",async event=>{
     if(action==="schedule-type-edit")openScheduleType(item.dataset.id);
     if(action==="schedule-type-delete")deleteScheduleType(item.dataset.id);
     if(action==="scroll-to"){document.getElementById(item.dataset.target)?.scrollIntoView({behavior:"smooth",block:"start"});}
+    if(action==="orders-more"){orderRowLimit+=500;render();}
     if(action==="calendar-day"){dashDay=item.dataset.date;render();}
     if(action==="schedule-add")openSchedule(null,item.dataset.date);
     if(action==="schedule-edit")openSchedule(item.dataset.id);

@@ -37,7 +37,8 @@
 
 ## Claude 아티팩트 = 운영 사이트 (휴대폰에서 사용)
 - 주소: https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV (비공개, 소유자만 열람). 데이터는 아티팩트 `db`의 `state` 컬렉션에 저장됩니다(규칙: 읽기·쓰기 admin 이상). **`state` 문서를 지우거나 덮어쓰지 마세요.**
-- 저장 구조: 페이지 안에서 `worker.mjs`가 그대로 돌며 검증하고(`tools/artifact-persist.js`가 `/api/state`를 가로챔), D1 표(market_state)를 `state/b1`(메타: revision, chunks)과 `state/b1-0…`(내용 조각, 한 조각 50,000자)로 저장합니다. 사업자 2는 `b2`입니다. 문서 하나는 256KiB 이하여야 해서 조각으로 나눕니다.
+- 저장 구조(format 2): 페이지 안에서 `worker.mjs`가 그대로 돌며 검증하고(`tools/artifact-persist.js`가 `/api/state`를 가로챔), D1 표(market_state)를 아티팩트 db에 나눠 저장합니다. 사업자 1은 `state/b1`(메타: format, revision, businessName, parts[{id,key,hash}])과 `state/b1-<조각id>`(내용 `{text}`, 문서당 150KB 이하), 사업자 2는 `b2`입니다. 주문(`orders`)은 주문일의 월별로 `orders-YYYY-MM-N` 조각에 나누고, 나머지 항목(원가시트·레시피·상품·사입·스케줄 등)은 항목마다 따로 저장합니다. 내용이 바뀐 조각만 쓰고(해시 비교) 안 쓰는 조각은 지웁니다. 이전 형식(format 1, `b1-0…`)도 읽고, 첫 저장 때 새 형식으로 바꿉니다.
+- 용량: 문서 하나 256KiB, 아티팩트 db 문서 25,000개. 주문 20,000건(약 8MB)까지 저장·복원을 확인했습니다. 서버 검증 한도는 주문 200,000건, 요청 60MB이고 엑셀 가져오기는 한 파일 50,000행까지입니다. 주문 목록은 500건씩 표시합니다(`orders-more`).
 - 만들기: `node tools/build-artifact.mjs` → `dist/artifact/marketdesk.html`(저장 모드). `--demo`를 붙이면 샘플 데이터로 고정한 체험용(저장 안 됨)이 됩니다.
 - 갱신: Artifact 도구로 이 파일을 위 `url`에 다시 게시하고, `capabilities`는 `{"db":{"rules":[{"path":"state","read":"admin","write":"admin"}]}}`를 그대로 넘깁니다. 코드를 다시 게시해도 저장된 데이터는 유지됩니다.
 - 데이터를 직접 넣거나 확인할 때는 `ArtifactData`로 `state` 컬렉션을 읽습니다. 처음 데이터는 `tools/qa/fake-server.mjs`(`/__empty`)에서 원가시트·제품 레시피를 가져와 만든 내용을 위 형식으로 넣었습니다.

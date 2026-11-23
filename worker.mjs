@@ -31,7 +31,7 @@ function validRecipeMaterials(row) {
 
 function validData(data) {
   if (!data || !Array.isArray(data.orders) || !Array.isArray(data.products) ||
-      data.orders.length > 10000 || data.products.length > 3000) return false;
+      data.orders.length > 200000 || data.products.length > 3000) return false;
   const rules=data.printRules??[];
   const records=data.officeRecords??[];
   if(data.costSheet!==undefined&&!validCostSheet(data.costSheet))return false;
@@ -117,10 +117,10 @@ async function state(request, env, url) {
   if (request.method !== "PUT") return json({error: "지원하지 않는 요청입니다."}, 405);
   if (request.headers.get("origin") !== url.origin) return json({error: "요청 출처를 확인해 주세요."}, 403);
   if ((request.headers.get("content-type") || "").split(";")[0] !== "application/json") return json({error: "JSON 요청이 필요합니다."}, 415);
-  if (Number(request.headers.get("content-length")) > 1800000) return json({error: "저장 용량을 초과했습니다."}, 413);
+  if (Number(request.headers.get("content-length")) > 60000000) return json({error: "저장 용량을 초과했습니다."}, 413);
   let input;
   const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > 1800000) return json({error: "저장 용량을 초과했습니다."}, 413);
+  if (bytes.byteLength > 60000000) return json({error: "저장 용량을 초과했습니다."}, 413);
   try { input = JSON.parse(new TextDecoder().decode(bytes)); }
   catch { return json({error: "저장 형식을 확인해 주세요."}, 400); }
   if(!input?.data||typeof input.data!=="object")return json({error:"저장 형식을 확인해 주세요."},400);
