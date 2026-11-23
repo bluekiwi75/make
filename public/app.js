@@ -2642,7 +2642,9 @@ function costSheetView(){
       esc(row.name),fmt.format(row.grams)+"g",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")),
       price(recipeCosts.get(row.name))
     ]))),
-    materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg"],sheet.materials.map(row=>[esc(row.name),esc(row.tax),fmt.format(row.boxKg),price(row.price)]))),
+    materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg","도매가 변경"],sheet.materials.map(row=>[esc(row.name),esc(row.tax),fmt.format(row.boxKg),price(row.price),
+      row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+esc(row.name)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="새 도매가" aria-label="'+esc(row.name)+' 새 도매가 (원/kg)">'+
+        '<button class="short" type="submit">변경</button></form>']))),
     offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","계산 원물비","원물 원가율","판매수수료","부가세","생산비"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
         const cost=recipeCosts.get(row.name)*offer.packs;
