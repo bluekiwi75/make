@@ -2138,6 +2138,11 @@ $("file").addEventListener("change",async event=>{
   if(file)try{await importOrders(file);}catch(error){notify(error.message);}
 });
 $("content").addEventListener("input",event=>{
+  const priceForm=event.target.name==="price"&&event.target.closest(".bulk-price-form[data-tax]");
+  if(priceForm){
+    const value=event.target.valueAsNumber,preview=priceForm.querySelector("[data-vat-preview]");
+    preview.textContent=Number.isFinite(value)&&value>=0?"부가세 포함 "+won(value+materialVat(priceForm.dataset.tax,value)):"";
+  }
   if(["estimate-price","estimate-tax"].includes(event.target.name)){
     const row=event.target.closest("tr"),input=row.querySelector('[name="estimate-price"]');
     const taxStatus=row.querySelector('[name="estimate-tax"]').value;
@@ -2174,6 +2179,7 @@ $("content").addEventListener("change",event=>{
     $("product-ranking-chart").innerHTML=productSalesRanking(orders);
     return;
   }
+  if(input.name==="material-tax"){void updateMaterialTax(input).catch(error=>{notify(error.message);render();});return;}
   if(input.name==="collect-market")collectionSelections.set(business,new Set(selectedCollectionChannels()));
   if(form?.id!=="stats-form")return;
   if(input.id==="stats-all"){for(const box of form.querySelectorAll('[name="market"]'))box.checked=input.checked;}
@@ -2630,6 +2636,7 @@ async function importCostWorkbook(file){
       await commit(plan.data);
     },"현재 사업자에 적용","원가시트를 적용했습니다.");
 }
+const materialVat=(tax,price)=>tax==="과세"?Math.round(price/10):0;
 function costSheetView(){
   const sheet=store.costSheet;
   const heading=officeHeading("원물·레시피 원가",btn("원가시트 (.xlsx) 가져오기","cost-import",true)+officeLink("recipes","제품 레시피")+officeLink("profit","판매 손익"));
@@ -2642,9 +2649,13 @@ function costSheetView(){
       esc(row.name),fmt.format(row.grams)+"g",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")),
       price(recipeCosts.get(row.name))
     ]))),
-    materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg","도매가 변경","최종 수정일"],sheet.materials.map(row=>[esc(row.name),esc(row.tax),fmt.format(row.boxKg),price(row.price),
-      row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+esc(row.name)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="새 도매가" aria-label="'+esc(row.name)+' 새 도매가 (원/kg)">'+
-        '<button class="short" type="submit">변경</button></form>',esc(row.priceUpdatedOn??"—")]))),
+    materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg","부가세 / kg","부가세 포함가 / kg","도매가 변경","최종 수정일"],sheet.materials.map(row=>{
+      const vat=materialVat(row.tax,row.price),name=esc(row.name);
+      return [name,row.archived?esc(row.tax):'<select name="material-tax" data-material="'+name+'" aria-label="'+name+' 과세 여부">'+options(["과세","면세"],row.tax)+'</select>',
+      fmt.format(row.boxKg),price(row.price),price(vat),price(row.price+vat),
+      row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="새 도매가" aria-label="'+name+' 새 도매가 (원/kg)">'+
+        '<button class="short" type="submit">변경</button><small data-vat-preview class="muted"></small></form>',esc(row.priceUpdatedOn??"—")];
+    }))),
     offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","계산 원물비","원물 원가율","판매수수료","부가세","생산비"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
         const cost=recipeCosts.get(row.name)*offer.packs;
@@ -2708,6 +2719,13 @@ async function saveBulkMaterial(source,target,item,replacement){
   }
   await commit({...source,costSheet,products});
 }
+async function updateMaterialTax(select){
+  const item=activeBulkMaterials().find(row=>row.name===select.dataset.material);
+  if(!item)throw Error("원물 목록을 다시 열어 주세요.");
+  if(item.tax===select.value)return;
+  await saveBulkMaterial(store,business,item,{...item,tax:select.value});
+  notify(item.name+" 과세 여부를 "+select.value+"로 저장했습니다.");
+}
 async function updateBulkPrice(form){
   const item=activeBulkMaterials().find(row=>row.name===form.dataset.material);
   if(!item)throw Error("원물 목록을 다시 열어 주세요.");
@@ -2715,7 +2733,7 @@ async function updateBulkPrice(form){
   if(!Number.isInteger(price)||price<0||price>1e9)throw Error("도매가는 0~1,000,000,000원 사이의 정수로 입력해 주세요.");
   if(price===item.price){notify("현재 도매가와 같습니다.");return;}
   await saveBulkMaterial(store,business,item,{...item,price});
-  notify("도매가와 변경일을 저장했습니다.");
+  notify("도매가와 변경일을 저장했습니다. (부가세 포함 "+won(price+materialVat(item.tax,price))+")");
 }
 function editBulkMaterial(name,remove){
   const item=activeBulkMaterials().find(row=>row.name===name);
