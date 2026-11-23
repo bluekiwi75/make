@@ -2191,7 +2191,10 @@ $("content").addEventListener("change",event=>{
   }
   if(["start","end"].includes(input.name))form.elements.preset.value="지정";
 });
+const lastPageKey="marketdesk-last-page";
+const rememberPage=()=>{try{if(location.hash.length>1)localStorage.setItem(lastPageKey,location.hash.slice(1));}catch{}};
 window.addEventListener("hashchange",()=>{
+  rememberPage();
   if(page()!=="orders")filter={q:"",channel:"",status:""};
   render();
   window.scrollTo(0,0);
@@ -2963,6 +2966,11 @@ $("content").addEventListener("input",updateStatementDraft);
 $("content").addEventListener("change",updateStatementDraft);
 if(location.hostname==="127.0.0.1"||location.hostname==="localhost"){demo=true;demoStores=makeDemoStores();}
 render();
+try{
+  const saved=localStorage.getItem(lastPageKey);
+  if(location.hash.length<=1&&saved){history.replaceState(null,"","#"+saved);if(page()==="home"&&saved!=="home")history.replaceState(null,"","#home");}
+}catch{}
+rememberPage();
 load().catch(error=>{
   $("content").innerHTML='<div class="note">'+esc(error.message)+' '+btn("다시 시도","retry")+'</div>';
   $("connection").textContent="연결 확인 필요";
