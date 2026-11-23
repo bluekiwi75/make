@@ -16,7 +16,7 @@
 ## 로드맵 아티팩트
 - 주소: https://claude.ai/artifact/MkxnZ8tSxoDmy9e6uheaGN, 원본 `docs/roadmap.html`. 한 일, 해야 할 일, 메뉴 지도를 담고 있습니다.
 - 작업을 마칠 때 `DONE`(한 일)과 `TODO`(해야 할 일) 배열, 기준 시각, 최근 작업 번호를 고치고 위 `url`로 다시 게시합니다.
-- 맨 위 탭으로 영역을 나눕니다: `order`(주문·API), `purchase`(사입·재고), `recipe`(레시피·원가), `schedule`(스케줄), `system`(저장·운영). `TODO` 항목은 `a:["order"]`처럼 영역을 꼭 지정하고, `DONE` 항목은 네 번째 값에 영역 배열을 넣습니다(여러 영역 가능). 탭 주소는 `#order` 형식입니다. 새 메뉴 그룹은 `MENU_AREAS`에 영역을 지정합니다.
+- 맨 위 탭으로 영역을 나눕니다: `order`(주문·API), `purchase`(사입·재고), `recipe`(레시피·원가), `schedule`(스케줄), `system`(저장·운영), `cleanup`(메뉴 정리: 없어도 되는 메뉴 후보 `REMOVE`와 `a`에 `cleanup`을 넣은 추가 제안). `TODO` 항목은 `a:["order"]`처럼 영역을 꼭 지정하고, `DONE` 항목은 네 번째 값에 영역 배열을 넣습니다(여러 영역 가능). 탭 주소는 `#order` 형식입니다. 새 메뉴 그룹은 `MENU_AREAS`에 영역을 지정합니다.
 
 ## 구조
 - `public/app.js` 프런트엔드 전체(약 2,500줄). 샘플 모드는 `127.0.0.1`/`localhost`에서만 켜집니다.

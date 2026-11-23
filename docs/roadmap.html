@@ -85,6 +85,7 @@ h2{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
 .tab[aria-selected="true"] .count{background:rgba(255,255,255,.22);color:inherit}
 .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .area-desc{color:var(--muted);margin-top:10px;min-height:1.6em}
+.remove-why{min-width:6.5em}
 .empty-note{color:var(--muted);padding:14px 0}
 </style>
 
@@ -93,7 +94,7 @@ h2{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
     <div>
       <h1>마켓데스크 로드맵</h1>
       <p class="lead">주문·배송·재고·사입·생산·스케줄을 한 곳에서 관리하는 웹 도구입니다. 지금까지 한 일과 앞으로 할 일을 한 화면에 모았습니다.</p>
-      <div class="asof"><span>기준 <b>2026-11-23 21:24 KST</b></span><span>최근 작업 <b>#47</b></span><span>개발 브랜치 <b>claude/funny-wozniak-rt4sh9</b></span></div>
+      <div class="asof"><span>기준 <b>2026-11-23 21:27 KST</b></span><span>최근 작업 <b>#48</b></span><span>개발 브랜치 <b>claude/funny-wozniak-rt4sh9</b></span></div>
     </div>
     <div class="links">
       <a class="btn primary" href="https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV" target="_blank" rel="noopener">앱 화면 열기</a>
@@ -106,7 +107,7 @@ h2{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
 
   <div class="tiles" aria-label="요약">
     <div class="tile lead-tile"><small>진행률</small><strong id="t-pct">0%</strong><div class="bar" aria-hidden="true"><span id="t-bar"></span></div></div>
-    <div class="tile"><small>한 일</small><strong id="t-done">0</strong></div>
+    <div class="tile"><small id="t-done-label">한 일</small><strong id="t-done">0</strong></div>
     <div class="tile"><small>남은 일</small><strong id="t-todo">0</strong></div>
     <div class="tile"><small>급한 일</small><strong id="t-high">0</strong></div>
     <div class="tile"><small id="t-menu-label">점검한 메뉴</small><strong id="t-menu">53개</strong></div>
@@ -146,6 +147,13 @@ h2{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
 
 <script>
 const TODO = [
+  {id:"prod2stock", a:["recipe","purchase","cleanup"], p:"high", t:"생산하면 상품 재고가 늘어나게 연결", d:"지금 생산 등록은 원물만 차감하고 완제품(상품) 재고는 늘리지 않습니다(코드로 확인). 레시피와 상품(SKU)의 연결 정보는 원가시트 카탈로그에 있어서 이어 붙일 수 있습니다.", need:"연결 방식 결정"},
+  {id:"stockadjust", a:["purchase","cleanup"], p:"mid", t:"재고 조정(실사·파손·폐기) 기록", d:"상품 재고는 입고 기준수량 하나뿐이라 고친 이력이 남지 않습니다. 조정 날짜와 사유를 남기면 재고 내역에 상품 잔량도 나옵니다."},
+  {id:"backup", a:["system","cleanup"], p:"mid", t:"데이터 백업·내보내기", d:"데이터가 claude.ai 안에만 있고 백업 파일이 없습니다. 전체 데이터를 파일로 내려받는 기능이 필요합니다.", need:"다운로드 허용 필요"},
+  {id:"po", a:["purchase","cleanup"], p:"mid", t:"발주 관리를 실제 기능으로", d:"지금 발주 관리는 링크만 있는 안내 화면입니다. 발주서 작성 → 거래명세서 입고 → 결제 예정으로 이어지게 만들 수 있습니다."},
+  {id:"pay", a:["purchase","schedule","cleanup"], p:"low", t:"사입 결제 관리 화면", d:"결제 예정일은 스케줄에 보이지만 결제 처리는 사입 목록 수정에서만 됩니다. 미결제 목록과 결제 처리를 한 화면에서 하면 좋습니다."},
+  {id:"costcheck", a:["purchase","recipe","cleanup"], p:"low", t:"거래명세서 단가와 원가시트 단가 비교", d:"명세서의 박스 단가가 원가시트의 원물 도매가와 다르면 알려 주고 갱신을 제안하는 기능입니다."},
+  {id:"lowstock", a:["purchase","order","cleanup"], p:"low", t:"재고 부족에서 발주 제안으로", d:"대시보드에 재고 부족 상품은 보이지만 발주로 이어지지 않습니다."},
   {id:"turn", a:["recipe"], p:"low", t:"1턴 원물 필요량 계산 규칙 확인", d:"엑셀의 자동·수동 1턴 필요량은 원래 앱이 원물 포장 단위로 계산한 값이라, 지금은 입력·보관만 합니다. 계산 방식을 알려주시면 자동 계산할 수 있습니다.", need:"계산 규칙 필요"},
   {id:"orderfile", a:["order"], p:"high", t:"주문 파일 가져오기 시험", d:"저장 구조는 주문 20,000건까지 확인했습니다. 실제 판매처 주문 파일(CSV·엑셀)을 올려 열 이름과 형식이 맞는지 확인해야 합니다. 한 파일은 50,000행까지입니다.", need:"주문 파일 필요"},
   {id:"stock0", a:["purchase"], p:"high", t:"상품 재고와 주문·사입 기록 채우기", d:"원가시트와 제품 레시피는 등록됐습니다. 상품 36개는 기준재고 0으로 들어가 있어서, 재고 수량은 거래명세서 반영이나 상품 화면에서 채워야 합니다. 코드가 없는 상품 1행(에브리데이넛츠 오리지날 믹스넛 500g+500g)은 코드를 채워야 등록됩니다.", need:"재고 수량·파일 필요"},
@@ -162,6 +170,7 @@ const TODO = [
   {id:"others", a:["system"], p:"low", t:"다른 프로젝트·PC 파일 연결", d:"이 세션은 bluekiwi75/make 저장소만 다룹니다. 이어서 할 저장소나 PC에만 있는 파일을 알려주면 연결합니다.", need:"저장소 이름 필요"}
 ];
 const DONE = [
+  ["#48","메뉴 구조 정리","메뉴 트리를 훑어 없어도 되는 메뉴 후보 10개와 더 하면 좋은 일 7개를 ‘메뉴 정리’ 탭에 정리",["system"]],
   ["#47","로드맵을 영역별 탭으로","주문·API, 사입·재고, 레시피·원가, 스케줄, 저장·운영 탭으로 나눠 영역별 해야 할 일·한 일·관련 메뉴를 봄",["system"]],
   ["#46","주문이 많아도 되는 저장 구조","주문을 월별로 나눠 저장하고 바뀐 부분만 다시 씀. 주문 20,000건까지 저장·복원 확인(이전 약 4,600건), 목록은 500건씩 표시",["order","system"]],
   ["#44","제품 레시피 폼을 엑셀과 같게","등록·수정 폼, 목록, 엑셀 다운로드·가져오기를 같은 8개 항목으로 통일. 엑셀과 왕복해도 값이 같음",["recipe"]],
@@ -188,6 +197,18 @@ const DONE = [
   ["#5","앱 화면 아티팩트","샘플 모드를 한 페이지로 묶어 휴대폰에서 확인",["system"]],
   ["#1","소스 이어받기","ZIP 소스를 저장소에 넣고 샘플 서버 실행 확인",["system"]]
 ];
+const REMOVE = [
+  ["송장번호 전송", "동작 안 함", "네이버 API로 송장을 보내는 화면입니다. 이 사이트에는 판매처 API 연동이 없어 보낼 수 없습니다. (배송업무, 상단 3. 상품발송)"],
+  ["판매처 로그인 정보 등록, 판매처 연결 관리", "동작 안 함", "암호화 키가 없어 저장이 거부됩니다. 마켓관리자의 ‘판매처 연결 관리’도 같은 화면입니다."],
+  ["폴더 설정, 엑셀 캐시 삭제", "동작 안 함", "폴더 선택 기능이 휴대폰과 아티팩트에서 지원되지 않습니다. 인쇄파일 내보내기의 폴더 저장에만 쓰입니다."],
+  ["창 그룹 전체", "휴대폰에서 필요 없음", "좌측메뉴 보이기, 계단식·수직·수평 배열, 모든창 닫기는 데스크톱에서 창을 늘어놓는 기능입니다."],
+  ["같은 화면이 두 번 나오는 메뉴", "중복", "시작페이지 = 홈페이지, 판매처 관리 = 판매처 연결 관리, 반품송장 목록 = 반품관리가 각각 같은 화면입니다. 하나씩만 두면 됩니다."],
+  ["상단 1·2·3 단계 메뉴와 배송업무 드롭다운", "중복", "주문수집·인쇄·발송 화면이 두 곳에 반복됩니다. 한쪽만 남기면 메뉴가 짧아집니다."],
+  ["매출 관리, 발주 관리 안내 화면", "기능 없음", "다른 메뉴로 가는 링크 모음뿐입니다. 매출 관리는 통계 메뉴로 충분하고, 발주 관리는 실제 기능을 만들거나 없애는 편이 낫습니다."],
+  ["주문수집의 API 수집, 수집 결과확인", "확인 필요", "주문을 CSV·엑셀로 가져온다면 API 수집 화면과 수집 결과확인은 비어 있게 됩니다. 주문 가져오기 방식을 정한 뒤 정리합니다."],
+  ["도움말의 내부 문의 기록, 마켓데스크 정보", "확인 필요", "내용이 원래 앱 기준이라 지금 사이트와 맞지 않을 수 있습니다. 쓰시는지 알려주세요."],
+  ["사업자 전환(사업자 2)", "확인 필요", "사업자를 하나만 쓰신다면 상단 전환 칸이 필요 없습니다."]
+];
 const MENUS = [
   ["설정","주문수집 열설정, 판매처 관리, 택배사, 내정보, 환경설정, 폴더 설정"],
   ["상품업무","상품관리, 원물·레시피 원가, 매칭규칙, 재고차감과 취소"],
@@ -208,9 +229,11 @@ const AREAS = [
   ["purchase", "사입·재고", "거래명세서 입고, 사입 기록, 재고 내역, 상품 재고"],
   ["recipe", "레시피·원가", "원가시트, 제품 레시피, 원물, 생산"],
   ["schedule", "스케줄", "월별 스케줄, 대시보드 달력, 스케줄 타입"],
-  ["system", "저장·운영", "데이터 저장, 휴대폰 사용, 알림, 점검, 문서"]
+  ["system", "저장·운영", "데이터 저장, 휴대폰 사용, 알림, 점검, 문서"],
+  ["cleanup", "메뉴 정리", "메뉴 구조를 보고 정리한 것: 없어도 되는 메뉴 후보와 더 하면 좋은 일"]
 ];
 const MENU_AREAS = {"설정": ["system"], "상품업무": ["recipe", "purchase"], "배송업무": ["order"], "송장목록": ["order"], "C/S업무": ["order"], "사입업무": ["purchase"], "스케줄": ["schedule"], "생산·레시피": ["recipe"], "통계": ["order"], "도구": ["system"], "마켓관리자": ["order"], "도움말": ["system"]};
+const WHY_TAG = {"동작 안 함": "high", "휴대폰에서 필요 없음": "mid", "중복": "mid", "기능 없음": "mid", "확인 필요": "low"};
 const PRI = {high:"급함", mid:"보통", low:"여유"};
 const KEY = "marketdesk-roadmap-checked";
 let checked = {};
@@ -224,33 +247,38 @@ let area = readArea();
 const inArea = list => area === "all" || (list || []).includes(area);
 
 function render() {
+  const cleanup = area === "cleanup";
   const todo = TODO.filter(x => inArea(x.a));
-  const done = DONE.filter(x => inArea(x[3]));
-  const menus = MENUS.filter(([t]) => inArea(MENU_AREAS[t]));
+  const done = cleanup ? [] : DONE.filter(x => inArea(x[3]));
+  const menus = cleanup ? MENUS : MENUS.filter(([t]) => inArea(MENU_AREAS[t]));
   const open = todo.filter(x => !checked[x.id]);
   const finished = todo.length - open.length + done.length;
   const total = todo.length + done.length;
-  const pct = total ? Math.round(finished / total * 100) : 0;
-  $("t-pct").textContent = pct + "%";
+  const pct = cleanup ? 0 : (total ? Math.round(finished / total * 100) : 0);
+  $("t-pct").textContent = cleanup ? "—" : pct + "%";
   $("t-bar").style.width = pct + "%";
-  $("t-done").textContent = finished;
+  $("t-done-label").textContent = cleanup ? "정리 후보" : "한 일";
+  $("t-done").textContent = cleanup ? REMOVE.length : finished;
   $("t-todo").textContent = open.length;
   $("t-high").textContent = open.filter(x => x.p === "high").length;
   $("t-menu-label").textContent = area === "all" ? "점검한 메뉴" : "관련 메뉴 그룹";
   $("t-menu").textContent = area === "all" ? "53개" : menus.length + "개";
   $("todo-count").textContent = open.length + "건 남음";
-  $("done-count").textContent = done.length + "건";
+  $("done-count").textContent = (cleanup ? REMOVE.length : done.length) + "건";
+  $("todo-h").textContent = cleanup ? "더 하면 좋은 일" : "해야 할 일";
+  $("done-h").textContent = cleanup ? "없어도 되는 것 (정리 후보)" : "한 일";
   $("tabs").innerHTML = AREAS.map(([key, label]) => {
-    const n = TODO.filter(x => (key === "all" || (x.a || []).includes(key)) && !checked[x.id]).length;
+    const n = TODO.filter(x => (key === "all" ? true : (x.a || []).includes(key)) && !checked[x.id]).length + (key === "cleanup" ? REMOVE.length : 0);
     return '<button type="button" class="tab" role="tab" data-area="' + key + '" aria-selected="' + (key === area) + '">' + esc(label) + '<span class="count" aria-label="남은 일 ' + n + '건">' + n + '</span></button>';
   }).join("");
   $("area-desc").textContent = AREAS.find(x => x[0] === area)[2];
   $("todo-list").innerHTML = todo.length ? todo.map(x =>
     '<li class="todo' + (checked[x.id] ? ' checked' : '') + '"><input type="checkbox" id="c-' + x.id + '" data-id="' + x.id + '"' + (checked[x.id] ? ' checked' : '') + ' aria-label="완료 표시">' +
     '<div><h3><label for="c-' + x.id + '">' + esc(x.t) + '</label></h3><p>' + esc(x.d) + '</p><div class="meta"><span class="tag ' + x.p + '">' + PRI[x.p] + '</span>' +
-    (x.need ? '<span class="tag need">' + esc(x.need) + '</span>' : '') + (area === "all" ? (x.a || []).map(k => '<span class="tag area">' + esc(AREAS.find(y => y[0] === k)[1]) + '</span>').join("") : "") + '</div></div></li>').join("")
+    (x.need ? '<span class="tag need">' + esc(x.need) + '</span>' : '') + (area === "all" ? (x.a || []).filter(k => k !== "cleanup").map(k => '<span class="tag area">' + esc(AREAS.find(y => y[0] === k)[1]) + '</span>').join("") : "") + '</div></div></li>').join("")
     : '<li class="empty-note">이 영역에 해야 할 일이 없습니다.</li>';
-  $("done-list").innerHTML = done.length ? done.map(([n, t, d]) =>
+  $("done-list").innerHTML = cleanup ? REMOVE.map(([t, why, d]) =>
+    '<li class="done"><span class="num remove-why"><span class="tag ' + (WHY_TAG[why] || "low") + '">' + esc(why) + '</span></span><div><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></div></li>').join("") : done.length ? done.map(([n, t, d]) =>
     '<li class="done"><span class="num">' + n + '</span><div><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></div></li>').join("")
     : '<li class="empty-note">이 영역에서 끝낸 일이 아직 없습니다.</li>';
   $("menu-grid").innerHTML = menus.map(([t, d, fresh]) =>
