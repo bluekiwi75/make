@@ -23,7 +23,7 @@ if (!demoMode) {
     .replace("export default {", "globalThis.__marketWorker = {");
   if (worker.includes("export default") || !worker.includes("globalThis.__marketWorker")) throw Error("worker transform failed");
   persistScripts = "<script>" + readFileSync(new URL("./artifact-persist.js", import.meta.url), "utf8").replace(/<\/script/gi, "<\\/script") + "</script>\n" +
-    "<script>(()=>{\n" + worker.replace(/<\/script/gi, "<\\/script") + "\n})();</script>\n";
+    "<script>(()=>{\n" + worker.replace(/<\/script/gi, "<\\/script") + "\nglobalThis.__marketLib = { mergeMarketOrders };\n})();</script>\n";
 }
 
 const scan = p("purchase-scan.js");

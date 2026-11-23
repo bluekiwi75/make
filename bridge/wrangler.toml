@@ -1,0 +1,11 @@
+name = "marketdesk-bridge"
+main = "dist/worker.js"
+compatibility_date = "2025-01-01"
+
+# 판매처 API 키를 암호화해서 보관하는 D1 데이터베이스
+# 아래 database_id는 `npx wrangler d1 create marketdesk-bridge`가 알려 주는 값으로 바꿉니다.
+[[d1_databases]]
+binding = "DB"
+database_name = "marketdesk-bridge"
+database_id = "REPLACE_WITH_DATABASE_ID"
+migrations_dir = "../drizzle"

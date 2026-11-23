@@ -43,7 +43,15 @@
 - 만들기: `node tools/build-artifact.mjs` → `dist/artifact/marketdesk.html`(저장 모드). `--demo`를 붙이면 샘플 데이터로 고정한 체험용(저장 안 됨)이 됩니다.
 - 갱신: Artifact 도구로 이 파일을 위 `url`에 다시 게시하고, `capabilities`는 `{"db":{"rules":[{"path":"state","read":"admin","write":"admin"}]}}`를 그대로 넘깁니다. 코드를 다시 게시해도 저장된 데이터는 유지됩니다.
 - 데이터를 직접 넣거나 확인할 때는 `ArtifactData`로 `state` 컬렉션을 읽습니다. 처음 데이터는 `tools/qa/fake-server.mjs`(`/__empty`)에서 원가시트·제품 레시피를 가져와 만든 내용을 위 형식으로 넣었습니다.
-- 이 사이트에서 쓸 수 없는 것: 판매처 API 연동(`/api/markets`), 사입 원본 파일 보관(`/api/purchase-document`), 파일 다운로드. 거래명세서 PDF 읽기는 페이지 안 pdf.js로 되고 스캔본 글자 인식은 안 됩니다.
+- 이 사이트에서 쓸 수 없는 것: 사입 원본 파일 보관(`/api/purchase-document`), 파일 다운로드. 거래명세서 PDF 읽기는 페이지 안 pdf.js로 되고 스캔본 글자 인식은 안 됩니다.
+
+## 판매처 API 연동 서버 (bridge/)
+- 아티팩트 페이지와 이 작업 환경은 외부 주소로 나갈 수 없어서, API 호출은 `bridge/`의 Cloudflare Worker(MCP 서버)가 맡습니다. 사용자가 이 서버를 배포하고 claude.ai에 커넥터 `마켓데스크 연동`(주소 `…/mcp/<BRIDGE_TOKEN>`)으로 추가해야 작동합니다. 배포 절차는 `bridge/README.md`.
+- 역할 분담: 연동 서버는 API 키 암호화 보관(D1)과 판매처 호출(`test`, `fetch`, `dispatch`, `save`, `list`)만 합니다. 주문 저장·병합·송장 전송 뒤 주문 상태 변경은 사이트(`tools/artifact-persist.js`의 `handleMarkets`)가 합니다(`mergeMarketOrders` 재사용).
+- 사이트가 부르는 도구는 `market_api` 하나(`claude.use("mcp").callTool("마켓데스크 연동","market_api",…)`)이고, 아티팩트 게시 때 `capabilities`에 `"mcp":{"servers":[{"server":"마켓데스크 연동","tools":["market_api"]}]}`도 함께 넘겨야 합니다.
+- 판매자센터 로그인 정보 등록은 사이트 안에서 처리합니다. 암호화 키는 `state/secret`(db)에 있고 소유자만 읽습니다.
+- 시험: `node bridge/build.mjs && node tools/qa/bridge-test.mjs`(연동 서버 단독, 가짜 판매처 응답), `node tools/build-artifact.mjs && node tools/qa/site-bridge-test.mjs`(사이트→커넥터→판매처 전체 흐름, 커넥터와 판매처는 가짜). 실제 claude.ai 커넥터와 실제 판매처 API는 시험하지 못했습니다.
+- 주의: 쿠팡·네이버가 호출 IP 제한을 요구하면 Cloudflare Workers의 가변 IP는 거절될 수 있습니다.
 
 ## 확인 방법
 - `node run-local.mjs` 후 `http://127.0.0.1:8787/#화면이름`. Playwright가 설치되어 있어 `require('playwright')`로 캡처할 수 있습니다.

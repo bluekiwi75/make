@@ -1,0 +1,13 @@
+{
+  "name": "marketdesk-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "deploy": "node build.mjs && wrangler deploy",
+    "test": "node build.mjs && node ../tools/qa/bridge-test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
