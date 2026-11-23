@@ -82,7 +82,7 @@ function validCostSheet(sheet){
   const materials=new Set(sheet.materials.map(m=>m.name));
   if(!rows(sheet.recipes,150,r=>r&&string(r.name,true)&&number(r.grams)&&r.grams>0&&
     rows(r.lines,20,m=>m&&materials.has(m.name)&&number(m.grams)&&m.grams>0)&&unique(r.lines,m=>m.name)&&
-    Math.abs(r.lines.reduce((sum,m)=>sum+m.grams,0)-r.grams)<0.00001&&Array.isArray(r.offers)&&r.offers.length<=100&&r.offers.every(o=>
+    Math.abs(r.lines.reduce((sum,m)=>sum+m.grams,0)-r.grams)<0.00001&&(r.actualCost===undefined||(number(r.actualCost)&&r.actualCost>=0&&r.actualCost<=1e9))&&Array.isArray(r.offers)&&r.offers.length<=100&&r.offers.every(o=>
       o&&string(o.name,true)&&amount(o.packs,1,1000)&&["sale","cost","fee","vat","production"].every(k=>number(o[k]))))||
     !unique(sheet.recipes,r=>r.name))return false;
   const recipes=new Set(sheet.recipes.map(r=>r.name));

@@ -2098,6 +2098,11 @@ document.addEventListener("click",async event=>{
   }catch(error){notify(error.message);}
 });
 $("content").addEventListener("submit",event=>{
+  if(event.target.matches(".recipe-actual-form")){
+    event.preventDefault();
+    if(!busy&&!switching)void updateRecipeActual(event.target).catch(error=>notify(error.message));
+    return;
+  }
   if(event.target.matches(".bulk-price-form")){
     event.preventDefault();
     if(!busy&&!switching)void updateBulkPrice(event.target).catch(error=>notify(error.message));
@@ -2645,10 +2650,12 @@ function costSheetView(){
   const price=value=>fmt.format(Math.round(value))+"원";
   const percent=(part,total)=>total?(100*part/total).toFixed(1)+"%":"—";
   const panels={
-    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",officeTable(["제품명","기준 중량","배합","계산 원물비"],sheet.recipes.map(row=>[
+    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",officeTable(["제품명","기준 중량","배합","계산 원물비","실제 원물가"],sheet.recipes.map(row=>[
       esc(row.name),fmt.format(row.grams)+"g",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")),
-      price(recipeCosts.get(row.name))
-    ]))),
+      price(recipeCosts.get(row.name)),
+      '<form class="recipe-actual-form" data-recipe="'+esc(row.name)+'"><input type="number" name="actual" min="0" max="1000000000" step="1" inputmode="numeric" value="'+(row.actualCost??"")+'" placeholder="비우면 계산값" aria-label="'+esc(row.name)+' 실제 원물가 (원)">'+
+        '<button class="short" type="submit">저장</button></form>'
+    ])))+'<p class="note">실제 원물가를 입력하면 아래 판매 시나리오의 원물비가 이 가격(× 구성 수량)으로 계산됩니다. 비워 두면 계산 원물비를 씁니다.</p>',
     materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg","부가세 / kg","부가세 포함가 / kg","도매가 변경","최종 수정일"],sheet.materials.map(row=>{
       const vat=materialVat(row.tax,row.price),name=esc(row.name);
       return [name,row.archived?esc(row.tax):'<select name="material-tax" data-material="'+name+'" aria-label="'+name+' 과세 여부">'+options(["과세","면세"],row.tax)+'</select>',
@@ -2656,9 +2663,9 @@ function costSheetView(){
       row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="새 도매가" aria-label="'+name+' 새 도매가 (원/kg)">'+
         '<button class="short" type="submit">변경</button><small data-vat-preview class="muted"></small></form>',esc(row.priceUpdatedOn??"—")];
     }))),
-    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","계산 원물비","원물 원가율","판매수수료","부가세","생산비"],
+    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료","부가세","생산비"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
-        const cost=recipeCosts.get(row.name)*offer.packs;
+        const cost=(row.actualCost??recipeCosts.get(row.name))*offer.packs;
         return [esc(offer.name),price(offer.sale),price(offer.cost),price(cost),percent(cost,offer.sale),price(offer.fee),price(offer.vat),price(offer.production)];
       })))),
     catalog:officePanel("카탈로그 단위원가 · "+catalog.length+"행",officeTable(["SKU","상품명","중량","계산 원물비","연결 확인"],catalog.map(row=>[
@@ -2718,6 +2725,16 @@ async function saveBulkMaterial(source,target,item,replacement){
     });
   }
   await commit({...source,costSheet,products});
+}
+async function updateRecipeActual(form){
+  const sheet=store.costSheet,recipe=sheet?.recipes.find(row=>row.name===form.dataset.recipe);
+  if(!recipe)throw Error("원가시트를 다시 열어 주세요.");
+  const raw=form.elements.actual.value.trim(),value=raw===""?undefined:form.elements.actual.valueAsNumber;
+  if(value!==undefined&&(!Number.isInteger(value)||value<0||value>1e9))throw Error("실제 원물가는 0~1,000,000,000원 사이의 정수로 입력해 주세요.");
+  if(value===recipe.actualCost){notify("현재 값과 같습니다.");return;}
+  const next={...recipe};if(value===undefined)delete next.actualCost;else next.actualCost=value;
+  await commit({...store,costSheet:{...sheet,recipes:sheet.recipes.map(row=>row===recipe?next:row)}});
+  notify(value===undefined?"실제 원물가를 지우고 계산 원물비를 씁니다.":recipe.name+" 실제 원물가를 "+won(value)+"으로 저장했습니다.");
 }
 async function updateMaterialTax(select){
   const item=activeBulkMaterials().find(row=>row.name===select.dataset.material);
