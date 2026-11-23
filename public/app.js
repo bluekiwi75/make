@@ -2640,7 +2640,7 @@ async function importCostWorkbook(file){
       await commit(plan.data);
     },"현재 사업자에 적용","원가시트를 적용했습니다.");
 }
-const offerShipping=1910,offerOverhead=200;
+const offerFeeRate=0.116;
 const materialVat=(tax,price)=>tax==="과세"?Math.round(price/10):0;
 const rowVat=row=>row.tax==="과세"?row.vat??materialVat(row.tax,row.price):0;
 const splitVat=(tax,gross)=>{const net=tax==="과세"?Math.round(gross/1.1):gross;return {price:net,vat:gross-net};};
@@ -2665,12 +2665,12 @@ function costSheetView(){
       row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="포함가 입력 후 Enter" aria-label="'+name+' 새 부가세 포함가 (원/kg)">'+
         '</form>',esc(row.priceUpdatedOn??"—")];
     }))),
-    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료","부가세","생산비","택배비","판관비","수익","수익률"],
+    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료 (11.6%)","부가세","생산비","수익","수익률"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
         const cost=(row.actualCost??recipeCosts.get(row.name))*offer.packs;
-        const profit=offer.sale-cost-offer.fee-offer.vat-offer.production-offerShipping-offerOverhead;
-        return [esc(offer.name),price(offer.sale),price(offer.cost),price(cost),percent(cost,offer.sale),price(offer.fee),price(offer.vat),price(offer.production),
-          price(offerShipping),price(offerOverhead),'<span class="'+(profit<=0?"danger":"")+'">'+price(profit)+'</span>','<span class="'+(profit<=0?"danger":"")+'">'+percent(profit,offer.sale)+'</span>'];
+        const fee=Math.round(offer.sale*offerFeeRate),profit=offer.sale-cost-fee-offer.vat-offer.production;
+        return [esc(offer.name),price(offer.sale),price(offer.cost),price(cost),percent(cost,offer.sale),price(fee),price(offer.vat),price(offer.production),
+          '<span class="'+(profit<=0?"danger":"")+'">'+price(profit)+'</span>','<span class="'+(profit<=0?"danger":"")+'">'+percent(profit,offer.sale)+'</span>'];
       })))),
     catalog:officePanel("카탈로그 단위원가 · "+catalog.length+"행",officeTable(["SKU","상품명","중량","계산 원물비","연결 확인"],catalog.map(row=>[
       esc(row.sku),esc(row.name),fmt.format(row.grams)+"g",row.cost===null?"—":price(row.cost),
@@ -2679,7 +2679,7 @@ function costSheetView(){
   };
   const offerCount=sheet.recipes.reduce((total,row)=>total+row.offers.length,0);
   const jump=[["recipes","제품 레시피 "+sheet.recipes.length],["materials","원물 "+sheet.materials.length],["offers","판매 시나리오 "+offerCount],["catalog","카탈로그 "+catalog.length]];
-  return heading+'<p class="note">'+esc(sheet.source)+' · 원물 단가(원/kg) × 배합 중량(g) ÷ 1,000. 판매 시나리오의 원본 원가는 비교용입니다. 수익 = 판매가 − 원물비 − 판매수수료 − 부가세 − 생산비 − 택배비(1,910원) − 판관비(200원), 수익률 = 수익 ÷ 판매가.</p>'+
+  return heading+'<p class="note">'+esc(sheet.source)+' · 원물 단가(원/kg) × 배합 중량(g) ÷ 1,000. 판매 시나리오의 원본 원가는 비교용입니다. 판매수수료는 판매가의 11.6%입니다. 수익 = 판매가 − 원물비 − 판매수수료 − 부가세 − 생산비, 수익률 = 수익 ÷ 판매가.</p>'+
     '<div class="jump-bar" role="group" aria-label="바로가기">'+jump.map(([id,label])=>'<button type="button" data-action="scroll-to" data-target="cost-'+id+'">'+label+'</button>').join("")+'</div>'+
     jump.map(([id])=>panels[id].replace('<section class="panel">','<section class="panel" id="cost-'+id+'">')).join("");
 }
