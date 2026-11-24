@@ -1984,6 +1984,18 @@ document.addEventListener("click",async event=>{
   const extension=excel?".xlsx":".csv";
   try{
     if((switching||busy)&&action!=="close")return;
+  if(action==="open-window"){
+    const local=["127.0.0.1","localhost","127.0.0.2"].includes(location.hostname);
+    const target=local?location.href:marketdeskUrl;
+    const opened=window.open(target,"_blank");
+    if(opened)opened.opener=null;
+    else{
+      $("dialog-body").innerHTML='<div class="dialog-head"><h2>새 창으로 열기</h2>'+btn("닫기","close")+
+        '</div><div class="fields"><label class="wide">팝업이 막혀 있습니다. 아래 주소를 새 창에 붙여 넣어 주세요.<input readonly value="'+esc(target)+'"></label></div>';
+      $("dialog").showModal();
+    }
+    return;
+  }
     if(action==="share-work"){await shareWork();return;}
     if(action.startsWith("office-")){await officeAction(action.slice(7),item);return;}
     if(action==="range-preset"){rangeByPage[page()]={...statsPeriod(item.dataset.preset)};render();}
@@ -2234,6 +2246,7 @@ $("content").addEventListener("change",event=>{
   }
   if(["start","end"].includes(input.name))form.elements.preset.value="지정";
 });
+const marketdeskUrl="https://claude.ai/artifact/3Rigwfrnbw5tFjr3aLRPHV";
 const lastPageKey="marketdesk-last-page";
 const rememberPage=()=>{try{if(location.hash.length>1)localStorage.setItem(lastPageKey,location.hash.slice(1));}catch{}};
 window.addEventListener("hashchange",()=>{
