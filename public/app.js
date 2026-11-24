@@ -2254,12 +2254,15 @@ const officeGroups = [
   ["사입업무", [["purchaseStatement","매입관리 (거래명세서 입고)"],["stockHistory","재고 내역"],["purchases","사입 목록"],["bulkMaterials","벌크 원물 목록"],["suppliers","사입처 관리"]]],
   ["통계", [["statistics","일자별 판매 현황"],["dailyFreight","일자별 배송비 현황"],["marketSales","판매처별 매출 현황"],["skuSales","상품별 매출 현황"],["marketSkuSales","판매처별 상품매출 현황"],["profit","판매 손익"]]],
   ["스케줄", [["schedule","월별 스케줄"]]],
+  ["마켓관리자", [["marketAdmin","판매자센터 바로가기"],["setup","판매처 연결 관리"]]]
+];
+// 사용자 요청(#100)으로 메뉴에서 뺀 그룹입니다. 화면 이름(제목) 조회와 되살리기·합치기를 위해 코드에 남깁니다(docs/removed-features.md).
+const removedOfficeGroups = [
   ["도구", [["home","시작페이지"],["privacy","개인정보 폐기"],["?clear-export","엑셀 캐시 삭제"],["invoiceSearch","송장 검색"]]],
-  ["마켓관리자", [["marketAdmin","판매자센터 바로가기"],["setup","판매처 연결 관리"]]],
   ["창", [["?sidebar","좌측메뉴 보이기"],["?workspace-layout-stacked","계단식배열"],["?workspace-layout-vertical","수직 배열"],["?workspace-layout-horizontal","수평 배열"],["?workspace-close","모든창 닫기"]]],
   ["도움말", [["home","홈페이지"],["guide","사용설명서"],["?support","내부 문의 기록"],["about","마켓데스크 정보"]]]
 ];
-const officeLabels = Object.fromEntries(officeGroups.flatMap(([, rows]) => rows));
+const officeLabels = Object.fromEntries([...officeGroups,...removedOfficeGroups].flatMap(([, rows]) => rows));
 const collectionColumns = ["판매처","상품","상태","택배사·송장번호"];
 const officeOrderViews = {
   voidInvoices: o=>o.status==="취소",
