@@ -2098,6 +2098,11 @@ document.addEventListener("click",async event=>{
   }catch(error){notify(error.message);}
 });
 $("content").addEventListener("submit",event=>{
+  if(event.target.matches(".recipe-blend-form")){
+    event.preventDefault();
+    if(!busy&&!switching)void updateRecipeBlend(event.target).catch(error=>notify(error.message));
+    return;
+  }
   if(event.target.matches(".recipe-actual-form")){
     event.preventDefault();
     if(!busy&&!switching)void updateRecipeActual(event.target).catch(error=>notify(error.message));
@@ -2652,12 +2657,21 @@ function costSheetView(){
   const price=value=>fmt.format(Math.round(value))+"원";
   const percent=(part,total)=>total?(100*part/total).toFixed(1)+"%":"—";
   const panels={
-    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",officeTable(["제품명","기준 중량","배합","계산 원물비","실제 원물가"],sheet.recipes.map(row=>[
-      esc(row.name),fmt.format(row.grams)+"g",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")),
-      price(recipeCosts.get(row.name)),
-      '<form class="recipe-actual-form" data-recipe="'+esc(row.name)+'"><input type="number" name="actual" min="0" max="1000000000" step="1" inputmode="numeric" value="'+(row.actualCost??"")+'" placeholder="비우면 계산값" aria-label="'+esc(row.name)+' 실제 원물가 (원)">'+
-        '<button class="short" type="submit">저장</button></form>'
-    ])))+'<p class="note">실제 원물가를 입력하면 아래 판매 시나리오의 원물비(× 구성 수량)와 상품재고의 등록 단위원가가 이 가격으로 계산됩니다. 비워 두면 계산 원물비를 씁니다.</p>',
+    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",officeTable(["제품명","기준 중량","기준 배합","계산 원물비","실제 원물가"],sheet.recipes.flatMap(row=>{
+      const actualLines=row.actualLines||[],actualGrams=actualLines.reduce((sum,line)=>sum+line.grams,0);
+      const actualCost=actualLines.reduce((sum,line)=>sum+(prices.get(line.name)??0)*line.grams/1000,0);
+      return [[
+        esc(row.name),fmt.format(row.grams)+"g",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")),
+        price(recipeCosts.get(row.name)),
+        '<form class="recipe-actual-form" data-recipe="'+esc(row.name)+'"><input type="number" name="actual" min="0" max="1000000000" step="1" inputmode="numeric" value="'+(row.actualCost??"")+'" placeholder="비우면 계산값" aria-label="'+esc(row.name)+' 실제 원물가 (원)">'+
+          '<button class="short" type="submit">저장</button></form>'
+      ],[
+        '<span class="muted">└ '+esc(row.name)+' 실제 배합</span>',actualLines.length?fmt.format(actualGrams)+"g":"—",
+        '<form class="recipe-blend-form" data-recipe="'+esc(row.name)+'"><textarea name="blend" rows="'+Math.max(2,Math.min(8,actualLines.length||2))+'" maxlength="2000" placeholder="한 줄에 한 원물, 예: 찹쌀땅콩 100 g" aria-label="'+esc(row.name)+' 실제 배합">'+esc(recipeMaterialText(actualLines))+'</textarea>'+
+          '<button class="short" type="submit">저장</button></form>',
+        actualLines.length?price(actualCost):"—",""
+      ]];
+    })))+'<p class="note">기준 배합은 엑셀 원가시트의 배합이고, 실제 배합은 실제로 만든 배합을 따로 적어 둡니다(원물은 아래 원물 기준정보에 있는 이름이어야 합니다). 실제 원물가를 입력하면 아래 판매 시나리오의 원물비(× 구성 수량)와 상품재고의 등록 단위원가가 이 가격으로 계산됩니다. 비워 두면 계산 원물비를 씁니다.</p>',
     materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg (부가세 제외)","부가세 / kg","부가세 포함가 / kg","도매가 변경 (부가세 포함가 입력)","최종 수정일"],sheet.materials.map(row=>{
       const vat=rowVat(row),name=esc(row.name);
       return [name,row.archived?esc(row.tax):'<select name="material-tax" data-material="'+name+'" aria-label="'+name+' 과세 여부">'+options(["과세","면세"],row.tax)+'</select>',
@@ -2730,6 +2744,21 @@ async function saveBulkMaterial(source,target,item,replacement,keepVat){
     });
   }
   await commit({...source,costSheet,products});
+}
+async function updateRecipeBlend(form){
+  const sheet=store.costSheet,recipe=sheet?.recipes.find(row=>row.name===form.dataset.recipe);
+  if(!recipe)throw Error("원가시트를 다시 열어 주세요.");
+  const parsed=parseMaterialLines(form.elements.blend.value);
+  if(parsed.bad)throw Error("실제 배합 형식을 확인해 주세요: "+parsed.bad+" (예: 찹쌀땅콩 100 g)");
+  if(parsed.materials.length>20)throw Error("원물은 최대 20가지까지 입력할 수 있습니다.");
+  const names=new Map(sheet.materials.filter(item=>!item.archived).map(item=>[costName(item.name),item.name]));
+  const lines=parsed.materials.map(line=>({name:names.get(costName(line.name)),grams:line.grams}));
+  const unknown=parsed.materials.find((line,index)=>!lines[index].name);
+  if(unknown)throw Error("원물 기준정보에 없는 원물입니다: "+unknown.name);
+  if(new Set(lines.map(line=>line.name)).size!==lines.length)throw Error("같은 원물이 두 번 들어 있습니다.");
+  const next={...recipe};if(lines.length)next.actualLines=lines;else delete next.actualLines;
+  await commit({...store,costSheet:{...sheet,recipes:sheet.recipes.map(row=>row===recipe?next:row)}});
+  notify(lines.length?recipe.name+" 실제 배합을 저장했습니다.":"실제 배합을 지웠습니다.");
 }
 async function updateRecipeActual(form){
   const sheet=store.costSheet,recipe=sheet?.recipes.find(row=>row.name===form.dataset.recipe);
