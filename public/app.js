@@ -421,11 +421,28 @@ function stock() {
 
 const orderExpenseFields=[["shipping","택배비"],["pack","포장비"],["fee","판매수수료"],["discount","판매자 부담 할인"]];
 const standardSellingCosts={shipping:1909,pack:300,supplies:300,feePermille:116};
-function estimateProductProfit(unitCost,price,taxStatus){
+const defaultFeeRate=11.6;
+const feeStorageKey="marketdesk-fee-channel";
+let selectedFeeChannel="";
+try{selectedFeeChannel=localStorage.getItem(feeStorageKey)||"";}catch{}
+const registeredFeeRate=channel=>(store.channelFees||[]).find(row=>row.channel===channel)?.rate;
+function currentFee(){
+  const channel=businessChannels().includes(selectedFeeChannel)?selectedFeeChannel:"";
+  const registered=channel?registeredFeeRate(channel):undefined;
+  return {channel,rate:registered??defaultFeeRate,registered:registered!==undefined};
+}
+const feeLabel=fee=>(fee.channel?fee.channel+" ":"기본 ")+fee.rate+"%"+(fee.channel&&!fee.registered?" (미등록, 기본값)":"");
+function feeChannelSelect(){
+  const fee=currentFee();
+  return '<div class="fee-channel"><label>수수료 기준 판매처 <select name="fee-channel">'+
+    options([["","기본 ("+defaultFeeRate+"%)"],...businessChannels().map(name=>[name,name+" ("+(registeredFeeRate(name)??"미등록")+(registeredFeeRate(name)===undefined?"":"%")+")"])],fee.channel)+
+    '</select></label><small class="muted">판매처마다 수수료율이 달라서, 선택한 판매처의 수수료율로 계산합니다. 수수료율은 판매처 설정에서 등록합니다.</small></div>';
+}
+function estimateProductProfit(unitCost,price,taxStatus,feeRate=defaultFeeRate){
   const vat=taxStatus==="면세"?0:taxStatus==="과세"&&price!==null?Math.round(price/10):null;
   if(price===null||vat===null)return {vat:vat===null?"—":won(vat),total:"—",profit:"—",rate:"—",lowProfit:false};
-  const {shipping,pack,supplies,feePermille}=standardSellingCosts;
-  const total=unitCost+shipping+pack+supplies+Math.round(price*feePermille/1000)+vat;
+  const {shipping,pack,supplies}=standardSellingCosts;
+  const total=unitCost+shipping+pack+supplies+Math.round(price*feeRate/100)+vat;
   const profit=price-total;
   return {vat:won(vat),total:won(total),profit:won(profit),rate:price>0?(profit/price*100).toFixed(1)+"%":"—",lowProfit:profit<=1000};
 }
@@ -445,24 +462,25 @@ function standardTaxBySku(){
   }));
 }
 function standardCostPanel(){
-  const {shipping,pack,supplies,feePermille}=standardSellingCosts;
+  const {shipping,pack,supplies}=standardSellingCosts;
+  const fee=currentFee();
   const taxBySku=standardTaxBySku();
   const rows=store.products.map(product=>{
     const price=product.estimatedSalePrice??null;
     const taxStatus=product.estimatedTaxStatus===undefined?taxBySku.get(product.sku)??null:product.estimatedTaxStatus;
-    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(product.cost,price,taxStatus);
+    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(product.cost,price,taxStatus,fee.rate);
     const input='<input type="number" min="0" max="1000000000" step="1" inputmode="numeric" name="estimate-price" '+
       'data-sku="'+esc(product.sku)+'" data-unit-cost="'+product.cost+'" value="'+(price??"")+
       '" aria-label="'+esc(product.name+' ('+product.sku+') 판매가')+'">';
     const tax='<select name="estimate-tax" data-sku="'+esc(product.sku)+'" data-initial="'+esc(taxStatus??"")+
       '" aria-label="'+esc(product.name+' ('+product.sku+') 과세 여부')+'">'+options([["","미설정"],"과세","면세"],taxStatus??"")+'</select>';
-    return [esc(product.name),esc(product.sku),won(product.cost),won(shipping),won(pack),won(supplies),input,feePermille/10+"%",tax,
+    return [esc(product.name),esc(product.sku),won(product.cost),won(shipping),won(pack),won(supplies),input,fee.rate+"%",tax,
       '<span data-estimate-vat>'+vat+'</span>',
       '<span data-estimate-total>'+total+'</span>','<output data-estimate-profit class="amount-estimate'+(lowProfit?' danger':'')+'">'+profit+'</output>',
       '<output data-estimate-rate class="amount-estimate'+(lowProfit?' danger':'')+'">'+rate+'</output>'];
   });
-  return '<form id="standard-cost-form">'+officePanel("상품별 기준 원가",
-    '<p class="totals">상품 1개를 1건으로 발송하는 예상치입니다. 판매수수료는 판매가의 11.6%, 부가세는 과세 상품에 한해 판매가의 10%를 차감합니다. 과세 여부가 미설정이면 순익 계산에 앞서 선택해 주세요.</p>'+
+  return feeChannelSelect()+'<form id="standard-cost-form" data-fee-rate="'+fee.rate+'">'+officePanel("상품별 기준 원가",
+    '<p class="totals">상품 1개를 1건으로 발송하는 예상치입니다. 판매수수료는 판매가의 '+feeLabel(fee)+', 부가세는 과세 상품에 한해 판매가의 10%를 차감합니다. 과세 여부가 미설정이면 순익 계산에 앞서 선택해 주세요.</p>'+
     officeTable(["상품명","SKU","등록 단위원가","기준 택배비","기준 포장비","기준 부자재비","판매가 (원)","기준 수수료율","과세 여부","부가세","예상 총비용","예상 순익","수익률"],rows),
     rows.length?'<button type="submit" class="primary">기준값 저장</button>':"")+'</form>';
 }
@@ -580,6 +598,7 @@ function settings() {
   return head("판매처 설정",esc(names[business])+"의 API 키와 판매처를 관리합니다.",btn(bplus+" 판매처 추가","add-channel",true))+
   '<section class="panel"><div class="settings"><h2>판매처 목록 <small class="muted">'+listed.length+'곳</small></h2><ul class="channel-list">'+
   listed.map(name=>'<li><div class="channel-name"><strong>'+esc(name)+'</strong><small class="muted">'+(added.includes(name)?"직접 추가":"기본")+'</small></div><div class="buttons"><button type="button" class="short" data-action="seller-login" data-channel="'+esc(name)+'">'+(store.loginChannels?.includes(name)?"로그인 정보 수정":"로그인 정보 등록")+'</button><button type="button" class="short" data-action="delete-channel" data-channel="'+esc(name)+'" aria-label="'+esc(name)+' 판매처 삭제">삭제</button></div></li>').join("")+'</ul></div></section>'+
+  feeSettings()+
   marketSettings()+
   '<section class="panel"><div class="settings"><h2>사업자 관리</h2><p class="muted">상단에서 사업자를 선택하면 해당 사업자의 주문·배송·재고·손익이 표시됩니다.</p><div class="business-list">'+
   Object.entries(names).map(([slot,name])=>'<div class="business-row"><div><small class="muted">사업자 '+slot+'</small><strong>'+esc(name)+'</strong></div>'+
@@ -587,6 +606,13 @@ function settings() {
   '</div></div></section>'+
   '<section class="panel"><div class="settings"><h2>CSV·엑셀 주문 가져오기</h2><p class="muted">올웨이즈는 공개 주문 API 규격 확인 전까지 CSV·엑셀로 가져옵니다.</p><div class="buttons">'+formatButtons("주문 양식","template")+btn("CSV·엑셀 가져오기","import",true)+'</div></div></section>'+
   '<section class="panel"><div class="settings"><h2>샘플 주문 체험</h2><p class="muted">샘플 주문과 재고로 화면을 확인할 수 있습니다. 체험 중 변경한 데이터는 브라우저를 새로 열면 사라집니다.</p><div>'+btn(demo?"실제 데이터로 돌아가기":"샘플 화면 보기","demo")+'</div></div></section>';
+}
+function feeSettings(){
+  const rows=[...(store.customChannels||[]).slice().reverse(),...channels].filter(name=>businessChannels().includes(name));
+  return '<section class="panel"><div class="settings"><h2>판매처 수수료율</h2><p class="muted">판매처마다 수수료율이 달라서 판매처별로 등록해 두면 상품별 기준 원가와 판매 시나리오 계산에서 판매처를 골라 쓸 수 있습니다. 칸을 비우면 등록이 지워지고 기본 '+defaultFeeRate+'%를 씁니다. 입력하면 바로 저장됩니다.</p><ul class="channel-list">'+
+    rows.map(name=>{const rate=registeredFeeRate(name);return '<li><div class="channel-name"><strong>'+esc(name)+'</strong><small class="muted">'+(rate===undefined?"미등록 · 기본 "+defaultFeeRate+"%":"등록됨")+'</small></div>'+
+      '<div class="buttons"><input type="number" name="channel-fee" data-channel="'+esc(name)+'" min="0" max="100" step="0.01" inputmode="decimal" value="'+(rate??"")+'" placeholder="수수료율" aria-label="'+esc(name)+' 수수료율 (%)"> <span class="muted">%</span></div></li>';}).join("")+
+    '</ul></div></section>';
 }
 function marketSettings(){
   const title='<h2>오픈마켓 API · '+esc(names[business])+'</h2>';
@@ -2152,7 +2178,7 @@ $("content").addEventListener("input",event=>{
     const row=event.target.closest("tr"),input=row.querySelector('[name="estimate-price"]');
     const taxStatus=row.querySelector('[name="estimate-tax"]').value;
     const price=input.value!==""&&input.validity.valid?input.valueAsNumber:null;
-    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(Number(input.dataset.unitCost),price,taxStatus);
+    const {vat,total,profit,rate,lowProfit}=estimateProductProfit(Number(input.dataset.unitCost),price,taxStatus,Number(row.closest("form").dataset.feeRate));
     row.querySelector("[data-estimate-vat]").textContent=vat;
     row.querySelector("[data-estimate-total]").textContent=total;
     const profitOutput=row.querySelector("[data-estimate-profit]");
@@ -2185,6 +2211,12 @@ $("content").addEventListener("change",event=>{
     return;
   }
   if(input.name==="price"&&form?.matches(".bulk-price-form[data-tax]")){if(input.value!==""&&input.validity.valid)form.requestSubmit();return;}
+  if(input.name==="fee-channel"){
+    selectedFeeChannel=input.value;
+    try{localStorage.setItem(feeStorageKey,selectedFeeChannel);}catch{}
+    render();return;
+  }
+  if(input.name==="channel-fee"){void updateChannelFee(input).catch(error=>{notify(error.message);render();});return;}
   if(input.name==="material-tax"){void updateMaterialTax(input).catch(error=>{notify(error.message);render();});return;}
   if(input.name==="collect-market")collectionSelections.set(business,new Set(selectedCollectionChannels()));
   if(form?.id!=="stats-form")return;
@@ -2647,7 +2679,6 @@ async function importCostWorkbook(file){
       await commit(plan.data);
     },"현재 사업자에 적용","원가시트를 적용했습니다.");
 }
-const offerFeeRate=0.116;
 const materialVat=(tax,price)=>tax==="과세"?Math.round(price/10):0;
 const rowVat=row=>row.tax==="과세"?row.vat??materialVat(row.tax,row.price):0;
 const splitVat=(tax,gross)=>{const net=tax==="과세"?Math.round(gross/1.1):gross;return {price:net,vat:gross-net};};
@@ -2656,6 +2687,7 @@ function costSheetView(){
   const heading=officeHeading("원물·레시피 원가",btn("원가시트 (.xlsx) 가져오기","cost-import",true)+officeLink("recipes","제품 레시피")+officeLink("profit","판매 손익"));
   if(!sheet)return heading+'<div class="note">원물원가, 믹스넛제품, 전체상품 시트가 들어 있는 엑셀 파일을 선택하세요.</div>';
   const {prices,recipeCosts,products,catalog}=costSheetModel(sheet);
+  const scenarioFee=currentFee();
   const price=value=>fmt.format(Math.round(value))+"원";
   const percent=(part,total)=>total?(100*part/total).toFixed(1)+"%":"—";
   const panels={
@@ -2681,10 +2713,10 @@ function costSheetView(){
       row.archived?"삭제됨":'<form class="bulk-price-form" data-material="'+name+'" data-tax="'+esc(row.tax)+'"><input type="number" name="price" min="0" max="1000000000" step="1" required inputmode="numeric" placeholder="포함가 입력 후 Enter" aria-label="'+name+' 새 부가세 포함가 (원/kg)">'+
         '</form>',esc(row.priceUpdatedOn??"—")];
     }))),
-    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료 (11.6%)","부가세","생산비","수익","수익률"],
+    offers:officePanel("판매 시나리오 원가율",officeTable(["옵션","판매가","원본 원가","원물비","원물 원가율","판매수수료 ("+scenarioFee.rate+"%)","부가세","생산비","수익","수익률"],
       sheet.recipes.flatMap(row=>row.offers.map(offer=>{
         const cost=(row.actualCost??recipeCosts.get(row.name))*offer.packs;
-        const fee=Math.round(offer.sale*offerFeeRate),profit=offer.sale-cost-fee-offer.vat-offer.production;
+        const fee=Math.round(offer.sale*scenarioFee.rate/100),profit=offer.sale-cost-fee-offer.vat-offer.production;
         return [esc(offer.name),price(offer.sale),price(offer.cost),price(cost),percent(cost,offer.sale),price(fee),price(offer.vat),price(offer.production),
           '<span class="'+(profit<=0?"danger":"")+'">'+price(profit)+'</span>','<span class="'+(profit<=0?"danger":"")+'">'+percent(profit,offer.sale)+'</span>'];
       })))),
@@ -2695,7 +2727,7 @@ function costSheetView(){
   };
   const offerCount=sheet.recipes.reduce((total,row)=>total+row.offers.length,0);
   const jump=[["recipes","제품 레시피 "+sheet.recipes.length],["materials","원물 "+sheet.materials.length],["offers","판매 시나리오 "+offerCount],["catalog","카탈로그 "+catalog.length]];
-  return heading+'<p class="note">'+esc(sheet.source)+' · 원물 단가(원/kg) × 배합 중량(g) ÷ 1,000. 판매 시나리오의 원본 원가는 비교용입니다. 판매수수료는 판매가의 11.6%입니다. 수익 = 판매가 − 원물비 − 판매수수료 − 부가세 − 생산비, 수익률 = 수익 ÷ 판매가.</p>'+
+  return heading+feeChannelSelect()+'<p class="note">'+esc(sheet.source)+' · 원물 단가(원/kg) × 배합 중량(g) ÷ 1,000. 판매 시나리오의 원본 원가는 비교용입니다. 판매수수료는 판매가의 '+esc(feeLabel(scenarioFee))+'입니다. 수익 = 판매가 − 원물비 − 판매수수료 − 부가세 − 생산비, 수익률 = 수익 ÷ 판매가.</p>'+
     '<div class="jump-bar" role="group" aria-label="바로가기">'+jump.map(([id,label])=>'<button type="button" data-action="scroll-to" data-target="cost-'+id+'">'+label+'</button>').join("")+'</div>'+
     jump.map(([id])=>panels[id].replace('<section class="panel">','<section class="panel" id="cost-'+id+'">')).join("");
 }
@@ -2746,6 +2778,15 @@ async function saveBulkMaterial(source,target,item,replacement,keepVat){
     });
   }
   await commit({...source,costSheet,products});
+}
+async function updateChannelFee(input){
+  const channel=input.dataset.channel,raw=input.value.trim();
+  const rate=raw===""?undefined:Number(raw);
+  if(rate!==undefined&&(!Number.isFinite(rate)||rate<0||rate>100||Math.abs(Math.round(rate*100)-rate*100)>1e-6))throw Error("수수료율은 0~100% 사이로, 소수 둘째 자리까지 입력해 주세요.");
+  const rest=(store.channelFees||[]).filter(row=>row.channel!==channel);
+  const channelFees=rate===undefined?rest:[...rest,{channel,rate}];
+  await commit({...store,channelFees});
+  notify(rate===undefined?channel+" 수수료율 등록을 지웠습니다. 기본 "+defaultFeeRate+"%를 씁니다.":channel+" 수수료율을 "+rate+"%로 저장했습니다.");
 }
 async function updateRecipeBlend(form){
   const sheet=store.costSheet,recipe=sheet?.recipes.find(row=>row.name===form.dataset.recipe);
