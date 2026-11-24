@@ -160,3 +160,6 @@
 .recipe-actual-form{display:flex;gap:8px;align-items:center}
 .recipe-actual-form input{width:10rem;text-align:right}
 @media(max-width:640px){.recipe-field{grid-template-columns:1fr;gap:4px}}
+.recipe-table .recipe-main td{border-bottom:0;font-weight:600}
+.recipe-table .recipe-sub td{padding-top:0;display:table-cell}
+.recipe-table .recipe-sub .recipe-field{margin:6px 0}

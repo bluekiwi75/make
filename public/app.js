@@ -2657,19 +2657,19 @@ function costSheetView(){
   const price=value=>fmt.format(Math.round(value))+"원";
   const percent=(part,total)=>total?(100*part/total).toFixed(1)+"%":"—";
   const panels={
-    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",'<div class="recipe-cards">'+sheet.recipes.map(row=>{
+    recipes:officePanel("제품 레시피 · "+sheet.recipes.length+"개",'<div class="table-wrap"><table class="recipe-table"><thead><tr>'+th(["제품명","기준 중량","기준원물비","실제원물가"])+'</tr></thead><tbody>'+sheet.recipes.map(row=>{
       const actualLines=row.actualLines||[],actualGrams=actualLines.reduce((sum,line)=>sum+line.grams,0);
       const actualCost=actualLines.reduce((sum,line)=>sum+(prices.get(line.name)??0)*line.grams/1000,0);
       const field=(label,body)=>'<div class="recipe-field"><span class="recipe-field-label">'+label+'</span><div>'+body+'</div></div>';
-      return '<article class="recipe-card"><h3>'+esc(row.name)+' <small class="muted">기준 중량 '+fmt.format(row.grams)+'g</small></h3>'+
+      return '<tr class="recipe-main"><td>'+esc(row.name)+'</td><td>'+fmt.format(row.grams)+'g</td><td>'+price(recipeCosts.get(row.name))+'</td><td>'+
+        '<form class="recipe-actual-form" data-recipe="'+esc(row.name)+'"><input type="number" name="actual" min="0" max="1000000000" step="1" inputmode="numeric" value="'+(row.actualCost??"")+'" placeholder="비우면 기준원물비" aria-label="'+esc(row.name)+' 실제원물가 (원)">'+
+        '<button class="short" type="submit">저장</button></form></td></tr>'+
+        '<tr class="recipe-sub"><td colspan="4">'+
         field("기준배합",esc(row.lines.map(line=>line.name+" "+fmt.format(line.grams)+"g ("+percent(line.grams,row.grams)+")").join(" · ")))+
-        field("기준원물비",price(recipeCosts.get(row.name)))+
         field("실제배합"+(actualLines.length?" · "+fmt.format(actualGrams)+"g · 원물비 "+price(actualCost):""),
           '<form class="recipe-blend-form" data-recipe="'+esc(row.name)+'"><textarea name="blend" rows="'+Math.max(2,Math.min(8,actualLines.length||2))+'" maxlength="2000" placeholder="한 줄에 한 원물, 예: 찹쌀땅콩 100 g" aria-label="'+esc(row.name)+' 실제배합">'+esc(recipeMaterialText(actualLines))+'</textarea>'+
-          '<button class="short" type="submit">저장</button></form>')+
-        field("실제원물가",'<form class="recipe-actual-form" data-recipe="'+esc(row.name)+'"><input type="number" name="actual" min="0" max="1000000000" step="1" inputmode="numeric" value="'+(row.actualCost??"")+'" placeholder="비우면 기준원물비" aria-label="'+esc(row.name)+' 실제원물가 (원)">'+
-          '<button class="short" type="submit">저장</button></form>')+'</article>';
-    }).join("")+'</div>')+'<p class="note">기준배합은 엑셀 원가시트의 배합이고, 실제배합은 실제로 만든 배합을 따로 적어 둡니다(원물은 아래 원물 기준정보에 있는 이름이어야 합니다). 실제원물가를 입력하면 아래 판매 시나리오의 원물비(× 구성 수량)와 상품재고의 등록 단위원가가 이 가격으로 계산됩니다. 비워 두면 기준원물비를 씁니다.</p>',
+          '<button class="short" type="submit">저장</button></form>')+'</td></tr>';
+    }).join("")+'</tbody></table></div><p class="note">기준배합은 엑셀 원가시트의 배합이고, 실제배합은 실제로 만든 배합을 따로 적어 둡니다(원물은 아래 원물 기준정보에 있는 이름이어야 합니다). 실제원물가를 입력하면 아래 판매 시나리오의 원물비(× 구성 수량)와 상품재고의 등록 단위원가가 이 가격으로 계산됩니다. 비워 두면 기준원물비를 씁니다.</p>'),
     materials:officePanel("원물 기준정보 · "+sheet.materials.length+"개",officeTable(["원물명","과세 여부","박스 kg","도매가 / kg (부가세 제외)","부가세 / kg","부가세 포함가 / kg","도매가 변경 (부가세 포함가 입력)","최종 수정일"],sheet.materials.map(row=>{
       const vat=rowVat(row),name=esc(row.name);
       return [name,row.archived?esc(row.tax):'<select name="material-tax" data-material="'+name+'" aria-label="'+name+' 과세 여부">'+options(["과세","면세"],row.tax)+'</select>',
