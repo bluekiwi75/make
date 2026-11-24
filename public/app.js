@@ -2338,8 +2338,8 @@ function editRecipe(id){
     area(blendLabel,"detail",row?.detail,5,"한 줄에 한 원물, 예: 찹쌀땅콩 100g (20%). 원물명과 g 중량은 생산 시 원물 재고 차감에도 쓰이니 사입 품목명과 같게 적어 주세요.")+
     area(autoNeedLabel,"autoNeeds",row?.autoNeeds,4)+
     '<label class="wide">'+autoPackLabel+'<input name="autoPack" maxlength="200" value="'+esc(row?.autoPack||"")+'"></label>'+
-    '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>'+
-    area(manualNeedLabel,"manualNeeds",row?.manualNeeds,4),
+    area(manualNeedLabel,"manualNeeds",row?.manualNeeds,4)+
+    '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>',
     async values=>{
       const name=values.name.trim();
       if(!name)throw Error("제품명을 입력해 주세요.");
@@ -2368,12 +2368,12 @@ function exportRecipes(){
 function recipesView(){
   const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
   const rows=officeRows("recipes").map(row=>[
-    esc(row.name),cell(row.detail),cell(row.autoNeeds)+(row.autoPack?'<div class="recipe-text muted">'+esc(row.autoPack)+'</div>':""),esc(row.manualPack||""),cell(row.manualNeeds),
+    esc(row.name),cell(row.detail),cell(row.autoNeeds)+(row.autoPack?'<div class="recipe-text muted">'+esc(row.autoPack)+'</div>':""),cell(row.manualNeeds)+(row.manualPack?'<div class="recipe-text muted">'+esc(row.manualPack)+'</div>':""),
     '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
     '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
   return officeHeading(officeLabels.recipes||"제품 레시피",
       '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
-    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>![2,3,4].includes(index)),"작업"],rows));
+    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>![2,3,4,6].includes(index)),"작업"],rows));
 }
 
 function editOfficeRecord(type,id) {
