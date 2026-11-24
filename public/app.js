@@ -2371,7 +2371,9 @@ function editRecipe(id){
     area(autoNeedLabel,"autoNeeds",row?.autoNeeds,4)+
     '<label class="wide">'+autoPackLabel+'<input name="autoPack" maxlength="200" value="'+esc(row?.autoPack||"")+'"></label>'+
     area(manualNeedLabel,"manualNeeds",row?.manualNeeds,4)+
-    '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>',
+    '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>'+
+    '<label>한 바퀴 기준 턴 수<input type="number" name="cycleTurns" min="1" max="20" step="1" inputmode="numeric" value="'+(row?.cycleTurns??4)+'"></label>'+
+    area("한 바퀴 기준 원물 (1턴 기준 팩 수·팩 무게·박스 입수)","cycleLines",cycleLinesText(row?.cycleLines),6,"한 줄에 한 원물, 예: 찹쌀땅콩 3팩 4kg 입수 4. 한 바퀴 필요량은 1턴 팩 수 × 턴 수로 계산해 박스 수와 kg로 보여 줍니다."),
     async values=>{
       const name=values.name.trim();
       if(!name)throw Error("제품명을 입력해 주세요.");
@@ -2389,6 +2391,13 @@ function editRecipe(id){
       const record={id:row?.id||crypto.randomUUID(),type:"recipes",name,detail,note:row?.note||""};
       if(parsed.materials.length){record.unit=row?.unit||"봉";record.materials=parsed.materials;}
       for(const key of ["autoPack","autoNeeds","manualPack","manualNeeds"]){const value=values[key].trim();if(value)record[key]=value;}
+      const cycle=parseCycleLines(values.cycleLines);
+      if(cycle.bad)throw Error("한 바퀴 기준 원물은 ‘원물명 3팩 4kg 입수 4’ 형식으로 한 줄에 하나씩, 중복 없이 입력해 주세요: "+cycle.bad);
+      if(cycle.lines.length){
+        const turns=Number(values.cycleTurns);
+        if(!Number.isInteger(turns)||turns<1||turns>20)throw Error("한 바퀴 기준 턴 수는 1~20 사이의 정수로 입력해 주세요.");
+        record.cycleTurns=turns;record.cycleLines=cycle.lines;
+      }
       await commit({...store,officeRecords:[...(store.officeRecords||[]).filter(item=>item.id!==id),record]});
     });
 }
@@ -2396,6 +2405,40 @@ function exportRecipes(){
   const rows=officeRows("recipes");
   if(!rows.length)return notify("내려받을 레시피가 없습니다.");
   download("제품레시피_"+day()+".xlsx",[recipeColumns,...rows.map(row=>[row.name,row.detail,row.unit||"",recipeMaterialText(row.materials),row.autoPack||"",row.autoNeeds||"",row.manualPack||"",row.manualNeeds||""])]);
+}
+const cycleLinesText=lines=>(lines||[]).map(line=>line.name+" "+line.packs+"팩 "+line.packKg+"kg 입수 "+line.perBox).join("\n");
+function parseCycleLines(text){
+  const lines=[],seen=new Set();
+  for(const line of String(text??"").split(/\r?\n/).map(item=>item.trim()).filter(Boolean)){
+    const match=line.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*팩\s+(\d+(?:\.\d+)?)\s*kg\s+입수\s*(\d+(?:\.\d+)?)$/i);
+    const name=match?match[1].trim():"",packs=match?Number(match[2]):0,packKg=match?Number(match[3]):0,perBox=match?Number(match[4]):0;
+    if(!name||name.length>120||!(packs>0)||!(packKg>0)||!(perBox>0)||seen.has(name))return {lines,bad:line};
+    seen.add(name);lines.push({name,packs,packKg,perBox});
+  }
+  if(lines.length>20)return {lines,bad:"원물은 최대 20가지입니다."};
+  return {lines,bad:null};
+}
+const roundTo=(value,digits=2)=>Math.round(value*10**digits)/10**digits;
+function cycleRows(){
+  return officeRows("recipes").filter(row=>row.cycleLines?.length).flatMap(row=>{
+    const turns=row.cycleTurns||4;
+    return row.cycleLines.map(line=>{
+      const packs=line.packs*turns,boxes=packs/line.perBox;
+      return {recipe:row.name,turns,name:line.name,turnPacks:line.packs,packs,perBox:line.perBox,packKg:line.packKg,boxes,kg:packs*line.packKg};
+    });
+  });
+}
+function cyclePanels(){
+  const rows=cycleRows();
+  if(!rows.length)return "";
+  const detail=officeTable(["제품","원물","1턴 팩","한 바퀴 팩","박스 입수","!박스 수량","!필요 kg","!필요 박스(올림)"],rows.map(row=>[
+    esc(row.recipe)+' <small class="muted">'+row.turns+'턴 = 1바퀴</small>',esc(row.name),roundTo(row.turnPacks)+"팩",roundTo(row.packs)+"팩",row.perBox,roundTo(row.boxes),roundTo(row.kg)+"kg",Math.ceil(row.boxes-1e-9)]));
+  const totals=new Map();
+  for(const row of rows){const item=totals.get(row.name)||{boxes:0,kg:0};item.boxes+=row.boxes;item.kg+=row.kg;totals.set(row.name,item);}
+  const list=officeTable(["원물","!박스 수량 합계","!필요 kg 합계","!필요 박스(올림)"],[...totals].sort((a,b)=>b[1].kg-a[1].kg).map(([name,item])=>[
+    esc(name),roundTo(item.boxes),roundTo(item.kg)+"kg",Math.ceil(item.boxes-1e-9)]));
+  return officePanel("한 바퀴 기준 필요 수량 · 제품별",detail+'<p class="note">한 바퀴 = 정해 둔 턴 수(기본 4턴). 한 바퀴 팩 = 1턴 팩 × 턴 수, 박스 수량 = 한 바퀴 팩 ÷ 박스 입수, 필요 kg = 한 바퀴 팩 × 팩 무게.</p>')+
+    officePanel("원물별 필요 수량 목록 · 전 제품 1바퀴씩",list,'<button type="button" data-action="print-page">인쇄</button>');
 }
 function recipesView(){
   const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
@@ -2405,7 +2448,7 @@ function recipesView(){
     '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
   return officeHeading(officeLabels.recipes||"제품 레시피",
       '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
-    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>![2,3,4,6].includes(index)),"작업"],rows));
+    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>![2,3,4,6].includes(index)),"작업"],rows))+cyclePanels();
 }
 
 function editOfficeRecord(type,id) {
@@ -2982,6 +3025,7 @@ async function officeAction(action,item) {
     render();
     return;
   }
+  if(action==="print-page"){try{window.print();}catch{notify("이 화면에서는 인쇄를 열 수 없습니다.");}return;}
   if(action==="workspace-close"){
     openOfficePages.clear();
     workspaceLayout="";

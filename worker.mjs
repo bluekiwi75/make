@@ -38,7 +38,7 @@ function validData(data) {
   if(!Array.isArray(records)||records.length>5000||!records.every(row=>row&&
     ["carriers","suppliers","matches","support","recipes"].includes(row.type)&&
     string(row.id,true)&&string(row.name,true)&&
-    (row.type==="recipes"?recipeText(row.detail)&&(row.note===undefined||(typeof row.note==="string"&&row.note.length<=2000))&&validRecipeMaterials(row)&&["autoPack","manualPack"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=200))&&["autoNeeds","manualNeeds"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=2000)):string(row.detail)&&string(row.note))
+    (row.type==="recipes"?validRecipeCycle(row)&&recipeText(row.detail)&&(row.note===undefined||(typeof row.note==="string"&&row.note.length<=2000))&&validRecipeMaterials(row)&&["autoPack","manualPack"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=200))&&["autoNeeds","manualNeeds"].every(key=>row[key]===undefined||(typeof row[key]==="string"&&row[key].length<=2000)):string(row.detail)&&string(row.note))
   )||!unique(records,row=>row.id))return false;
   if(!Array.isArray(rules)||rules.length>50||!rules.every(rule=>rule&&
     ["name","deliveryMemo"].includes(rule.field)&&string(rule.find,true)&&string(rule.replacement)))return false;
@@ -70,6 +70,12 @@ function validData(data) {
     unique(data.orders, o => JSON.stringify([o.channel, o.number, o.line]));
 }
 
+function validRecipeCycle(row){
+  if(row.cycleTurns!==undefined&&!(Number.isInteger(row.cycleTurns)&&row.cycleTurns>=1&&row.cycleTurns<=20))return false;
+  if(row.cycleLines===undefined)return true;
+  const ok=(value,max)=>Number.isFinite(value)&&value>0&&value<=max;
+  return Array.isArray(row.cycleLines)&&row.cycleLines.length<=20&&row.cycleLines.every(line=>line&&string(line.name,true)&&line.name.length<=120&&ok(line.packs,1e6)&&ok(line.packKg,1e5)&&ok(line.perBox,1e5))&&unique(row.cycleLines,line=>line.name);
+}
 function validCostSheet(sheet){
   const number=value=>Number.isFinite(value)&&value>=0&&value<=1e9;
   const rows=(value,max,check)=>Array.isArray(value)&&value.length>0&&value.length<=max&&value.every(check);
