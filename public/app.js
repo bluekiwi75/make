@@ -2496,7 +2496,7 @@ function cyclePanels(){
   for(const row of rows){const item=totals.get(row.name)||{boxes:0,kg:0};item.boxes+=row.boxes;item.kg+=row.kg;totals.set(row.name,item);}
   const list=officeTable(["원물","!박스 수량 합계","!필요 kg 합계","!필요 박스(올림)"],[...totals].sort((a,b)=>b[1].kg-a[1].kg).map(([name,item])=>[
     esc(name),roundTo(item.boxes),roundTo(item.kg)+"kg",Math.ceil(item.boxes-1e-9)]));
-  return officePanel("한 바퀴 기준 필요 수량 · 제품별",detail+'<p class="note">한 바퀴 = 정해 둔 턴 수(기본 4턴). 한 바퀴 팩 = 1턴 팩 × 턴 수, 박스 수량 = 한 바퀴 팩 ÷ 박스 입수, 필요 kg = 한 바퀴 팩 × 팩 무게.</p>')+
+  return officePanel("한 바퀴 기준 필요 수량 · 제품별",detail)+
     officePanel("원물별 필요 수량 목록 · 전 제품 1바퀴씩",list,'<button type="button" data-action="print-page">인쇄</button>');
 }
 function recipesView(){
