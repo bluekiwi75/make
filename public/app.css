@@ -149,3 +149,5 @@
 .panel[id^="cost-"]{scroll-margin-top:12px}
 #cost-recipes td:nth-child(3){white-space:normal;min-width:260px;line-height:1.5}
 #cost-recipes td:nth-child(4),#cost-recipes th:nth-child(4){white-space:nowrap}
+.lap-input{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-weight:600}
+.lap-input input{width:5rem;text-align:right}

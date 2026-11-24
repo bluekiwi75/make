@@ -2174,6 +2174,12 @@ $("file").addEventListener("change",async event=>{
   if(file)try{await importOrders(file);}catch(error){notify(error.message);}
 });
 $("content").addEventListener("input",event=>{
+  if(event.target.name==="lap-count"){
+    const laps=event.target.valueAsNumber,id=event.target.dataset.id,row=officeRows("recipes").find(item=>item.id===id);
+    const valid=Number.isInteger(laps)&&laps>=1&&laps<=999;
+    if(row){if(valid)lapCounts.set(id,laps);event.target.closest(".lap-cell").querySelector("[data-lap-text]").textContent=cycleNeedsText(row,valid?laps:(lapCounts.get(id)||1));}
+    return;
+  }
   if(["estimate-price","estimate-tax"].includes(event.target.name)){
     const row=event.target.closest("tr"),input=row.querySelector('[name="estimate-price"]');
     const taxStatus=row.querySelector('[name="estimate-tax"]').value;
@@ -2418,10 +2424,17 @@ function parseCycleLines(text){
   if(lines.length>20)return {lines,bad:"원물은 최대 20가지입니다."};
   return {lines,bad:null};
 }
-function cycleNeedsText(row){
+const lapCounts=new Map();
+function cycleNeedsText(row,laps=1){
   if(!row.cycleLines?.length)return "";
   const turns=row.cycleTurns||4;
-  return row.cycleLines.map(line=>{const packs=line.packs*turns;return line.name+" "+roundTo(packs)+"팩 ("+roundTo(packs/line.perBox)+"박스 · "+roundTo(packs*line.packKg)+"kg)";}).join("\n")+"\n("+turns+"턴 = 1바퀴)";
+  return row.cycleLines.map(line=>{const packs=line.packs*turns*laps;return line.name+" "+roundTo(packs)+"팩 ("+roundTo(packs/line.perBox)+"박스 · "+roundTo(packs*line.packKg)+"kg)";}).join("\n")+"\n("+turns+"턴 = 1바퀴 · "+laps+"바퀴 필요량)";
+}
+function cycleCell(row){
+  if(!row.cycleLines?.length)return "";
+  const laps=lapCounts.get(row.id)||1;
+  return '<div class="lap-cell" data-id="'+esc(row.id)+'"><label class="lap-input">바퀴 수 <input type="number" name="lap-count" data-id="'+esc(row.id)+'" min="1" max="999" step="1" inputmode="numeric" value="'+laps+'" aria-label="'+esc(row.name)+' 바퀴 수"></label>'+
+    '<div class="recipe-text" data-lap-text>'+esc(cycleNeedsText(row,laps))+'</div></div>';
 }
 const roundTo=(value,digits=2)=>Math.round(value*10**digits)/10**digits;
 function cycleRows(){
@@ -2448,12 +2461,12 @@ function cyclePanels(){
 function recipesView(){
   const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
   const rows=officeRows("recipes").map(row=>[
-    esc(row.name),cell(row.detail),cell(row.autoNeeds)+(row.autoPack?'<div class="recipe-text muted">'+esc(row.autoPack)+'</div>':""),cell(row.manualNeeds)+(row.manualPack?'<div class="recipe-text muted">'+esc(row.manualPack)+'</div>':""),cell(cycleNeedsText(row)),
+    esc(row.name),cell(row.detail),cell(row.autoNeeds)+(row.autoPack?'<div class="recipe-text muted">'+esc(row.autoPack)+'</div>':""),cycleCell(row),cell(row.manualNeeds)+(row.manualPack?'<div class="recipe-text muted">'+esc(row.manualPack)+'</div>':""),
     '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
     '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
   return officeHeading(officeLabels.recipes||"제품 레시피",
       '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
-    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>![2,3,4,6].includes(index)),"한 바퀴 기준 원물 필요량","작업"],rows))+cyclePanels();
+    officePanel("제품 레시피 · "+rows.length+"개",officeTable([recipeColumns[0],recipeColumns[1],recipeColumns[5],"한 바퀴 기준 원물 필요량",recipeColumns[7],"작업"],rows))+cyclePanels();
 }
 
 function editOfficeRecord(type,id) {
