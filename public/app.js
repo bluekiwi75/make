@@ -2335,9 +2335,7 @@ function editRecipe(id){
   const [nameLabel,blendLabel,unitLabel,gramLabel,autoPackLabel,autoNeedLabel,manualPackLabel,manualNeedLabel]=recipeColumns;
   formDialog(row?"레시피 수정":"레시피 등록",
     '<label class="wide">'+nameLabel+'<input name="name" maxlength="120" value="'+esc(row?.name||"")+'" required></label>'+
-    area(blendLabel,"detail",row?.detail,5,"한 줄에 한 원물, 예: 찹쌀땅콩 100g (20%). 비워 두면 아래 원물 차감 기준에서 자동으로 만듭니다.")+
-    select(unitLabel,"recipeUnit",productionUnits,row?.unit||"봉")+
-    area(gramLabel,"recipeMaterials",recipeMaterialText(row?.materials),5,"한 줄에 한 원물, 예: 찹쌀땅콩 100 g. 사입 품목명과 같아야 생산 시 원물 재고에서 차감됩니다.")+
+    area(blendLabel,"detail",row?.detail,5,"한 줄에 한 원물, 예: 찹쌀땅콩 100g (20%). 원물명과 g 중량은 생산 시 원물 재고 차감에도 쓰이니 사입 품목명과 같게 적어 주세요.")+
     '<label class="wide">'+autoPackLabel+'<input name="autoPack" maxlength="200" value="'+esc(row?.autoPack||"")+'"></label>'+
     area(autoNeedLabel,"autoNeeds",row?.autoNeeds,4)+
     '<label class="wide">'+manualPackLabel+'<input name="manualPack" maxlength="200" value="'+esc(row?.manualPack||"")+'"></label>'+
@@ -2345,15 +2343,19 @@ function editRecipe(id){
     async values=>{
       const name=values.name.trim();
       if(!name)throw Error("제품명을 입력해 주세요.");
-      const parsed=parseMaterialLines(values.recipeMaterials);
-      if(parsed.bad)throw Error("원물 차감 기준은 ‘원물명 100 g’ 형식으로 한 줄에 하나씩, 중복 없이 입력해 주세요: "+parsed.bad);
-      if(parsed.materials.length>20)throw Error("원물은 최대 20가지까지 입력할 수 있습니다.");
       let detail=values.detail.trim();
-      if(!detail&&parsed.materials.length)detail=recipeBlendText(parsed.materials);
-      if(!detail)throw Error("재료·배합 또는 원물 차감 기준 (g)을 입력해 주세요.");
+      if(!detail)throw Error("재료·배합을 입력해 주세요.");
+      // 재료·배합의 ‘원물명 100g (20%)’ 줄에서 원물 차감 기준(원물명·g)을 만듭니다. 읽을 수 없는 줄이 있으면 기존 값을 유지합니다.
+      const blend=detail.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>line.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*g\b/i));
+      let parsed={materials:row?.materials||[],bad:null};
+      if(blend.length&&blend.every(Boolean)){
+        parsed=parseMaterialLines(blend.map(match=>match[1]+" "+match[2]+" g").join("\n"));
+        if(parsed.bad)throw Error("재료·배합은 ‘원물명 100g’ 형식으로 한 줄에 하나씩, 중복 없이 입력해 주세요: "+parsed.bad);
+        if(parsed.materials.length>20)throw Error("원물은 최대 20가지까지 입력할 수 있습니다.");
+      }
       if(officeRows("recipes").some(item=>item.id!==id&&item.name===name))throw Error("이미 등록되어 있습니다.");
       const record={id:row?.id||crypto.randomUUID(),type:"recipes",name,detail,note:row?.note||""};
-      if(parsed.materials.length){record.unit=values.recipeUnit;record.materials=parsed.materials;}
+      if(parsed.materials.length){record.unit=row?.unit||"봉";record.materials=parsed.materials;}
       for(const key of ["autoPack","autoNeeds","manualPack","manualNeeds"]){const value=values[key].trim();if(value)record[key]=value;}
       await commit({...store,officeRecords:[...(store.officeRecords||[]).filter(item=>item.id!==id),record]});
     });
@@ -2366,12 +2368,12 @@ function exportRecipes(){
 function recipesView(){
   const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
   const rows=officeRows("recipes").map(row=>[
-    esc(row.name),cell(row.detail),esc(row.unit||""),cell(recipeMaterialText(row.materials)),esc(row.autoPack||""),cell(row.autoNeeds),esc(row.manualPack||""),cell(row.manualNeeds),
+    esc(row.name),cell(row.detail),esc(row.autoPack||""),cell(row.autoNeeds),esc(row.manualPack||""),cell(row.manualNeeds),
     '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
     '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
   return officeHeading(officeLabels.recipes||"제품 레시피",
       '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
-    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns,"작업"],rows));
+    officePanel("제품 레시피 · "+rows.length+"개",officeTable([...recipeColumns.filter((_,index)=>index!==2&&index!==3),"작업"],rows));
 }
 
 function editOfficeRecord(type,id) {
