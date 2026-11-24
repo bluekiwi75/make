@@ -2177,7 +2177,7 @@ $("content").addEventListener("input",event=>{
   if(event.target.name==="lap-count"){
     const laps=event.target.valueAsNumber,id=event.target.dataset.id,row=officeRows("recipes").find(item=>item.id===id);
     const valid=Number.isInteger(laps)&&laps>=1&&laps<=999;
-    if(row){if(valid)lapCounts.set(id,laps);event.target.closest(".lap-cell").querySelector("[data-lap-text]").textContent=cycleNeedsText(row,valid?laps:(lapCounts.get(id)||1));}
+    if(row){if(valid)lapCounts.set(id,laps);event.target.closest(".lap-cell").querySelector("[data-lap-body]").innerHTML=cycleTable(row,valid?laps:(lapCounts.get(id)||1));}
     return;
   }
   if(["estimate-price","estimate-tax"].includes(event.target.name)){
@@ -2425,16 +2425,54 @@ function parseCycleLines(text){
   return {lines,bad:null};
 }
 const lapCounts=new Map();
-function cycleNeedsText(row,laps=1){
-  if(!row.cycleLines?.length)return "";
-  const turns=row.cycleTurns||4;
-  return row.cycleLines.map(line=>{const packs=line.packs*turns*laps;return line.name+" "+roundTo(packs)+"팩 ("+roundTo(packs/line.perBox)+"박스 · "+roundTo(packs*line.packKg)+"kg)";}).join("\n")+"\n("+turns+"턴 = 1바퀴 · "+laps+"바퀴 필요량)";
+function miniTable(heads,rows,foot){
+  const num=index=>index>0?' class="num"':"";
+  return '<table class="mini"><thead><tr>'+heads.map((head,index)=>'<th'+num(index)+'>'+head+'</th>').join("")+'</tr></thead><tbody>'+
+    rows.map(cells=>'<tr>'+cells.map((cell,index)=>'<td'+num(index)+'>'+cell+'</td>').join("")+'</tr>').join("")+'</tbody>'+
+    (foot?'<tfoot><tr>'+foot.map((cell,index)=>'<td'+num(index)+'>'+cell+'</td>').join("")+'</tr></tfoot>':"")+'</table>';
 }
-function cycleCell(row){
-  if(!row.cycleLines?.length)return "";
+const emptyBlock='<p class="muted">입력된 내용이 없습니다.</p>';
+function blendTable(row){
+  const items=row.materials||[];
+  if(!items.length)return row.detail?'<div class="recipe-text">'+esc(row.detail)+'</div>':emptyBlock;
+  const total=items.reduce((sum,item)=>sum+item.grams,0);
+  return miniTable(["원물","중량","비율"],items.map(item=>[esc(item.name),roundTo(item.grams)+"g",roundTo(item.grams/total*100,1)+"%"]),["합계",roundTo(total)+"g","100%"]);
+}
+function needsTable(text){
+  const lines=String(text||"").split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+  const rows=[],extra=[];let total="";
+  for(const line of lines){
+    let match=line.match(/^(.+?)\s+(\d+(?:\.\d+)?)팩\s*\((\d+(?:\.\d+)?)kg\)$/);
+    if(match){rows.push([esc(match[1]),match[2]+"팩",match[3]+"kg"]);continue;}
+    match=line.match(/^합계\s+(\d+(?:\.\d+)?)kg$/);
+    if(match){total=match[1]+"kg";continue;}
+    extra.push(line);
+  }
+  if(!rows.length)return text?'<div class="recipe-text">'+esc(text)+'</div>':emptyBlock;
+  return miniTable(["원물","팩","무게"],rows,total?["합계","",total]:null)+(extra.length?'<div class="recipe-text muted">'+esc(extra.join("\n"))+'</div>':"");
+}
+function cycleTable(row,laps=1){
+  const turns=row.cycleTurns||4,items=row.cycleLines.map(line=>{const packs=line.packs*turns*laps;return {name:line.name,packs,boxes:packs/line.perBox,kg:packs*line.packKg};});
+  return miniTable(["원물","팩","박스","무게"],items.map(item=>[esc(item.name),roundTo(item.packs)+"팩",roundTo(item.boxes)+"박스",roundTo(item.kg)+"kg"]),
+    ["합계","",roundTo(items.reduce((sum,item)=>sum+item.boxes,0))+"박스",roundTo(items.reduce((sum,item)=>sum+item.kg,0))+"kg"])+
+    '<p class="muted">'+turns+'턴 = 1바퀴 · '+laps+'바퀴 필요량</p>';
+}
+function cycleBlock(row){
+  if(!row.cycleLines?.length)return emptyBlock;
   const laps=lapCounts.get(row.id)||1;
-  return '<div class="lap-cell" data-id="'+esc(row.id)+'"><label class="lap-input">바퀴 수 <input type="number" name="lap-count" data-id="'+esc(row.id)+'" min="1" max="999" step="1" inputmode="numeric" value="'+laps+'" aria-label="'+esc(row.name)+' 바퀴 수"></label>'+
-    '<div class="recipe-text" data-lap-text>'+esc(cycleNeedsText(row,laps))+'</div></div>';
+  return '<div class="lap-cell"><label class="lap-input">바퀴 수 <input type="number" name="lap-count" data-id="'+esc(row.id)+'" min="1" max="999" step="1" inputmode="numeric" value="'+laps+'" aria-label="'+esc(row.name)+' 바퀴 수"></label>'+
+    '<div data-lap-body>'+cycleTable(row,laps)+'</div></div>';
+}
+function recipeCard(row){
+  const block=(title,body,sub="")=>'<section class="recipe-block"><h4>'+title+'</h4>'+(sub?'<p class="muted">'+esc(sub)+'</p>':"")+body+'</section>';
+  const total=(row.materials||[]).reduce((sum,item)=>sum+item.grams,0);
+  return '<article class="recipe-card2"><header><h3>'+esc(row.name)+(total?' <small class="muted">기준 '+roundTo(total)+'g</small>':"")+'</h3><div class="buttons">'+
+    '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
+    '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button></div></header>'+
+    '<div class="recipe-blocks">'+block("재료·배합",blendTable(row))+
+      block("자동 기준 · 1턴",needsTable(row.autoNeeds),row.autoPack||"")+
+      block("한 바퀴 기준",cycleBlock(row))+
+      block("수동 기준 · 1턴",needsTable(row.manualNeeds),row.manualPack||"")+'</div></article>';
 }
 const roundTo=(value,digits=2)=>Math.round(value*10**digits)/10**digits;
 function cycleRows(){
@@ -2459,14 +2497,10 @@ function cyclePanels(){
     officePanel("원물별 필요 수량 목록 · 전 제품 1바퀴씩",list,'<button type="button" data-action="print-page">인쇄</button>');
 }
 function recipesView(){
-  const cell=value=>'<div class="recipe-text">'+esc(value||"")+'</div>';
-  const rows=officeRows("recipes").map(row=>[
-    esc(row.name),cell(row.detail),cell(row.autoNeeds)+(row.autoPack?'<div class="recipe-text muted">'+esc(row.autoPack)+'</div>':""),cycleCell(row),cell(row.manualNeeds)+(row.manualPack?'<div class="recipe-text muted">'+esc(row.manualPack)+'</div>':""),
-    '<button class="short" data-action="office-edit" data-type="recipes" data-id="'+esc(row.id)+'">수정</button> '+
-    '<button class="short danger" data-action="office-remove" data-type="recipes" data-id="'+esc(row.id)+'">삭제</button>']);
+  const rows=officeRows("recipes");
   return officeHeading(officeLabels.recipes||"제품 레시피",
       '<button type="button" class="primary" data-action="office-edit" data-type="recipes">레시피 등록</button>'+btn("엑셀 가져오기","recipe-import")+btn("엑셀 다운로드","recipe-export"))+
-    officePanel("제품 레시피 · "+rows.length+"개",officeTable([recipeColumns[0],recipeColumns[1],recipeColumns[5],"한 바퀴 기준 원물 필요량",recipeColumns[7],"작업"],rows))+cyclePanels();
+    officePanel("제품 레시피 · "+rows.length+"개",rows.length?'<div class="recipe-cards2">'+rows.map(recipeCard).join("")+'</div>':'<p class="empty">등록된 레시피가 없습니다.</p>')+cyclePanels();
 }
 
 function editOfficeRecord(type,id) {

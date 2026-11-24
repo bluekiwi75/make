@@ -151,3 +151,19 @@
 #cost-recipes td:nth-child(4),#cost-recipes th:nth-child(4){white-space:nowrap}
 .lap-input{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-weight:600}
 .lap-input input{width:5rem;text-align:right}
+.recipe-cards2{display:grid;gap:14px;padding:4px 16px 16px}
+.recipe-card2{border:1px solid var(--line);border-radius:12px;background:#fbfcfa;overflow:hidden}
+.recipe-card2>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;background:#eef4ec;border-bottom:1px solid var(--line);height:auto;color:var(--ink)}
+.recipe-card2>header h3{margin:0;font-size:16px;letter-spacing:-.03em}
+.recipe-blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0}
+.recipe-block{padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.recipe-block h4{margin:0 0 6px;font-size:13px;color:var(--green)}
+.recipe-block>.muted{font-size:12px;margin:0 0 6px}
+table.mini{width:100%;border-collapse:collapse;white-space:normal;font-size:12.5px}
+table.mini th{background:#eef2ee;font-size:11px;padding:6px 8px;text-align:left}
+table.mini td{padding:6px 8px;border-top:1px solid #e6ede7}
+table.mini th.num,table.mini td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.mini tbody tr:nth-child(even) td{background:#f7faf7}
+table.mini tfoot td{font-weight:700;background:#eaf3dd;border-top:2px solid #cfe0c6}
+.lap-cell .muted{font-size:12px;margin:6px 0 0}
+table.mini td:first-child,table.mini th:first-child{white-space:nowrap}table.mini td.num{white-space:nowrap}
