@@ -2,3 +2,4 @@
 /node_modules/
 /bridge/dist/
 /handoff/*.zip
+/handoff/*.json
